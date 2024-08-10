@@ -19,8 +19,9 @@ const IncomeDocument = ({currentUser}) => {
             try {
                 const response = await getIncomes();
                 if (response.data && Array.isArray(response.data)) {
-                    setIncomes(response.data.reverse()); // Реверс массива для отображения последних добавленных записей первыми
-                    setFilteredIncomes(response.data.reverse()); // Реверсируем и для фильтрованных данных
+                    const sortedData = response.data.reverse()
+                    setIncomes(sortedData);
+                    setFilteredIncomes(sortedData);
                 } else {
                     console.error('Invalid response data:', response.data);
                 }
@@ -52,11 +53,11 @@ const IncomeDocument = ({currentUser}) => {
         }
 
         if (startDate) {
-            filteredData = filteredData.filter(item => item.contract_date >= startDate);
+            filteredData = filteredData.filter(item => item.created_at >= startDate);
         }
 
         if (endDate) {
-            filteredData = filteredData.filter(item => item.contract_date <= endDate);
+            filteredData = filteredData.filter(item => item.created_at <= endDate);
         }
 
         setFilteredIncomes(filteredData);
@@ -83,15 +84,15 @@ const IncomeDocument = ({currentUser}) => {
     };
 
     const handleUpdateIncome = (updatedIncome) => {
-        setIncomes(prevIncomes => [
+        const updatedIncomes = [
             updatedIncome,
-            ...prevIncomes.filter(income => income.id !== updatedIncome?.id)
-        ]);
+            ...incomes.filter(income => income.id !== updatedIncome?.id)
+        ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-        setFilteredIncomes(prevIncomes => [
-            updatedIncome,
-            ...prevIncomes.filter(income => income.id !== updatedIncome?.id)
-        ]);
+        setIncomes(updatedIncomes);
+        setFilteredIncomes(updatedIncomes);
+
+        console.log("Последний добавленный income:", updatedIncome);
     };
 
     return (
@@ -139,7 +140,7 @@ const IncomeDocument = ({currentUser}) => {
                             <td className="py-2 px-4 border">{income.contract_number}</td>
                             <td className="py-2 px-4 border">{income.invoice_date}</td>
                             <td className="py-2 px-4 border">{income.invoice_number}</td>
-                            <td className="py-2 px-4 border">{income.total}</td>
+                            <td className="py-2 px-4 border">{income.total.toLocaleString()} сум.</td>
                             <td className="py-2 px-4 border flex flex-col gap-2">
                                 <Button size="sm" color="blue" onClick={() => handleViewDetails(income)}>
                                     Просмотр

@@ -1,9 +1,11 @@
-import React, {useEffect, useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {Dialog, DialogHeader, DialogBody, DialogFooter, Button} from '@material-tailwind/react';
 import {getProducts} from '../api/api';
+import DocumentDialogIncome from './DocumentDialogIncome.jsx'; // Импорт компонента
 
 const IncomeDetails = ({isOpen, onClose, income}) => {
     const [products, setProducts] = useState({});
+    const [showDocument, setShowDocument] = useState(false); // Состояние для отображения документа
 
     useEffect(() => {
         const fetchProducts = async () => {
@@ -27,8 +29,8 @@ const IncomeDetails = ({isOpen, onClose, income}) => {
 
     if (!income) return null;
 
-    const handleCopy = () => {
-        const markingsText = income.product_markings.map(marking => marking.marking).join('\n');
+    const handleCopy = (markings) => {
+        const markingsText = markings.join('\n');
         navigator.clipboard.writeText(markingsText).then(() => {
             alert('Маркировки скопированы в буфер обмена!');
         }).catch(error => {
@@ -36,10 +38,19 @@ const IncomeDetails = ({isOpen, onClose, income}) => {
         });
     };
 
+    const groupedMarkings = income.product_markings.reduce((acc, marking) => {
+        const productName = products[marking.product]?.name || `Product ID ${marking.product}`;
+        if (!acc[productName]) {
+            acc[productName] = [];
+        }
+        acc[productName].push(marking.marking);
+        return acc;
+    }, {});
+
     return (
         <Dialog open={isOpen} handler={onClose} size="lg" className="overflow-auto">
             <DialogHeader className='flex justify-between'>
-                <p>Детали дохода</p>
+                <p>Детали прихода</p>
                 <svg onClick={onClose} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                      strokeWidth={1.5} stroke="currentColor" className="size-6 cursor-pointer">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12"/>
@@ -62,36 +73,54 @@ const IncomeDetails = ({isOpen, onClose, income}) => {
                     </div>
                     <div>
                         <p><strong>Единица измерения:</strong> {income.unit_of_measure}</p>
-                        <p><strong>Общая сумма:</strong> {income.total}</p>
+                        <p><strong>Общая сумма:</strong> {income.total.toLocaleString()} сум</p>
                     </div>
                     <div>
-                        <strong>Продукты:</strong>
-                        {income.product_markings && income.product_markings.length > 0 ? (
-                            <div>
-                                <Button onClick={handleCopy} color="blue" size="sm">Скопировать все маркировки</Button>
-                                <div className="flex flex-wrap mt-2">
-                                    {income.product_markings.map((marking, index) => (
-                                        <div key={index} className="border p-2 m-1">
-                                            <p><strong>Маркировка:</strong> {marking.marking}</p>
-                                            <p>
-                                                <strong>Продукт:</strong> {products[marking.product]?.name || `Product ID ${marking.product}`}
-                                            </p>
-                                            <p>
-                                                <strong>Цена:</strong> {products[marking.product]?.price !== undefined ? `${products[marking.product].price} руб.` : 'N/A'}
-                                            </p>
+                        <strong>Продукты и маркировки:</strong>
+                        {Object.keys(groupedMarkings).length > 0 ? (
+                            <div className="flex flex-wrap mt-2">
+                                {Object.entries(groupedMarkings).map(([productName, markings], index) => (
+                                    <div key={index} className="border p-2 m-1 w-full">
+                                        <div className="flex justify-between">
+                                            <p><strong>Продукт:</strong> {productName}</p>
+                                            <div className="flex flex-col items-end text-black">
+                                                {markings.map((marking, idx) => (
+                                                    <p key={idx}> {marking}</p>
+                                                ))}
+                                            </div>
                                         </div>
-                                    ))}
-                                </div>
+                                        <div className="flex justify-end mt-2">
+                                            <Button
+                                                onClick={() => handleCopy(markings)}
+                                                color="blue"
+                                                size="sm"
+                                            >
+                                                Скопировать маркировки
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         ) : (
                             <p>Нет продуктов</p>
                         )}
                     </div>
                 </div>
+                <Button
+                    color="green"
+                    size="sm"
+                    className="mt-4"
+                    onClick={() => setShowDocument(true)}
+                >
+                    Показать документ
+                </Button>
             </DialogBody>
             <DialogFooter>
                 <Button onClick={onClose}>Закрыть</Button>
             </DialogFooter>
+
+            {/* Использование отдельного компонента DocumentDialogIncomeIcome */}
+            <DocumentDialogIncome isOpen={showDocument} onClose={() => setShowDocument(false)} income={income}/>
         </Dialog>
     );
 };

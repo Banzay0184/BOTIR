@@ -19,8 +19,9 @@ const OutcomeDocument = ({currentUser}) => {
             try {
                 const response = await getOutcomes();
                 if (response.data && Array.isArray(response.data)) {
-                    setOutcomes(response.data.reverse());
-                    setFilteredOutcomes(response.data.reverse());
+                    const sortedData = response.data.reverse()
+                    setOutcomes(sortedData);
+                    setFilteredOutcomes(sortedData);
                 } else {
                     console.error('Invalid response data:', response.data);
                 }
