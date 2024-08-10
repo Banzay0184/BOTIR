@@ -135,7 +135,7 @@ export default function Sidebar({currentUser, onLogout}) {
                                         <ListItemPrefix>
                                             <ChevronRightIcon strokeWidth={3} className="h-3 w-5"/>
                                         </ListItemPrefix>
-                                        Приход
+                                        Главный склад
                                     </ListItem>
                                 </Link>
                                 <Link to={'/outcome'}>
@@ -143,7 +143,7 @@ export default function Sidebar({currentUser, onLogout}) {
                                         <ListItemPrefix>
                                             <ChevronRightIcon strokeWidth={3} className="h-3 w-5"/>
                                         </ListItemPrefix>
-                                        Расход
+                                        Информация по расходам
                                     </ListItem>
                                 </Link>
                             </List>

@@ -73,6 +73,7 @@ __pycache__/
 # C extensions
 *.so
 
+backend/db.sqlite3
 # Distribution / packaging
 .Python
 venv/

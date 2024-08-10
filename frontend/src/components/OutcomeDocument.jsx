@@ -19,9 +19,8 @@ const OutcomeDocument = ({currentUser}) => {
             try {
                 const response = await getOutcomes();
                 if (response.data && Array.isArray(response.data)) {
-                    console.log('Setting outcomes:', response.data); // Отладочный вывод
-                    setOutcomes(response.data);
-                    setFilteredOutcomes(response.data);
+                    setOutcomes(response.data.reverse());
+                    setFilteredOutcomes(response.data.reverse());
                 } else {
                     console.error('Invalid response data:', response.data);
                 }
@@ -149,7 +148,7 @@ const OutcomeDocument = ({currentUser}) => {
                                     Просмотр
                                 </Button>
                                 <Button
-                                    disabled={currentUser.position === 'Бухгалтер' || currentUser.position === 'Директор' ? true : false}
+                                    disabled={currentUser.position === 'Бухгалтер' || currentUser.position === 'Директор' || currentUser.position === 'Учредитель'}
                                     size="sm"
                                     color="green"
                                     onClick={() => handleEditOutcome(outcome)}>

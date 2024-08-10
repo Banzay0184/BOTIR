@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import { Dialog, DialogHeader, DialogBody, DialogFooter, Button, Input } from '@material-tailwind/react';
-import { createCompany } from '../api/api'; // Проверьте путь к вашему API
+import React, {useState} from 'react';
+import {Dialog, DialogHeader, DialogBody, DialogFooter, Button, Input} from '@material-tailwind/react';
+import {createCompany} from '../api/api'; // Проверьте путь к вашему API
 
-const AddCompanyModal = ({ isOpen, onClose, onAddCompany }) => {
+const AddCompanyModal = ({isOpen, onClose, onAddCompany}) => {
     const [formData, setFormData] = useState({
         name: '',
         phone: '',
@@ -10,7 +10,7 @@ const AddCompanyModal = ({ isOpen, onClose, onAddCompany }) => {
     });
 
     const handleChange = (e) => {
-        const { name, value } = e.target;
+        const {name, value} = e.target;
         setFormData((prevData) => ({
             ...prevData,
             [name]: value,
@@ -63,7 +63,7 @@ const AddCompanyModal = ({ isOpen, onClose, onAddCompany }) => {
                             required
                         />
                     </div>
-                    <DialogFooter>
+                    <DialogFooter className='flex justify-between items-center space-x-2 '>
                         <Button
                             type="button"
                             color="red"

@@ -2,16 +2,15 @@ import React, {useState, useEffect} from 'react';
 import {Card, Typography, Button} from "@material-tailwind/react";
 import IncomeItemList from "./IncomeItemList.jsx";
 import AddIncomeModal from './AddIncomeModal.jsx';
-import OutcomeCreateModal from './OutcomeCreateModal.jsx'; // Импортируем OutcomeCreateModal
+import OutcomeCreateModal from './OutcomeCreateModal.jsx';
 import {getIncomes} from '../api/api';
-import OutcomeItemList from "./OutcomeItemList.jsx";
 
 const TABLE_HEAD = ["ID", "Название товара", "Единица измерения", "ИКПУ", "Маркировка", "Действия"];
 
 export default function IncomeList({currentUser}) {
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setModalOpen] = useState(false);
-    const [isOutcomeModalOpen, setOutcomeModalOpen] = useState(false); // Состояние для Outcome модального окна
+    const [isOutcomeModalOpen, setOutcomeModalOpen] = useState(false);
     const [totalMarkings, setTotalMarkings] = useState(0);
     const [selectedMarkings, setSelectedMarkings] = useState([]);
     const [incomes, setIncomes] = useState([]);
@@ -50,7 +49,6 @@ export default function IncomeList({currentUser}) {
         setModalOpen(false);
     };
 
-
     return (
         <>
             <Card className="snap-y h-[100vh] w-full overflow-scroll">
@@ -63,11 +61,18 @@ export default function IncomeList({currentUser}) {
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="p-2 border rounded"
                         />
-                        <Button disabled={currentUser.position === 'Директор'} color='blue' onClick={toggleModal}>
+                        <Button
+                            disabled={currentUser.position === 'Директор' || currentUser.position === 'Учредитель'}
+                            color='blue'
+                            onClick={toggleModal}
+                        >
                             Приход
                         </Button>
-                        <Button color='red' onClick={() => setOutcomeModalOpen(true)}
-                                disabled={selectedMarkings.length === 0 || currentUser.position === 'Директор'}>
+                        <Button
+                            color='red'
+                            onClick={() => setOutcomeModalOpen(true)}
+                            disabled={selectedMarkings.length === 0 || currentUser.position === 'Директор' || currentUser.position === 'Учредитель'}
+                        >
                             Расход
                         </Button>
                     </div>
@@ -97,8 +102,8 @@ export default function IncomeList({currentUser}) {
                         onUpdateMarkingCount={handleUpdateMarkingCount}
                         selectedMarkings={selectedMarkings}
                         setSelectedMarkings={setSelectedMarkings}
-                        incomes={incomes} // Передаем incomes в IncomeItemList
-                        setIncomes={setIncomes} // Передаем функцию для обновления incomes
+                        incomes={incomes}
+                        setIncomes={setIncomes}
                         currentUser={currentUser}
                     />
                     </tbody>
@@ -107,7 +112,7 @@ export default function IncomeList({currentUser}) {
             <AddIncomeModal
                 isOpen={isModalOpen}
                 onClose={handleCloseModal}
-                onAddIncome={handleAddIncome} // Передаем функцию handleAddIncome
+                onAddIncome={handleAddIncome}
             />
             <OutcomeCreateModal
                 isOpen={isOutcomeModalOpen}

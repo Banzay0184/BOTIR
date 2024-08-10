@@ -19,9 +19,8 @@ const IncomeDocument = ({currentUser}) => {
             try {
                 const response = await getIncomes();
                 if (response.data && Array.isArray(response.data)) {
-                    setIncomes(response.data);
-                    setFilteredIncomes(response.data);
-                    console.log(response.data)
+                    setIncomes(response.data.reverse()); // Реверс массива для отображения последних добавленных записей первыми
+                    setFilteredIncomes(response.data.reverse()); // Реверсируем и для фильтрованных данных
                 } else {
                     console.error('Invalid response data:', response.data);
                 }
@@ -64,7 +63,6 @@ const IncomeDocument = ({currentUser}) => {
     };
 
     const handleViewDetails = (income) => {
-        console.log('Selected income:', income);
         setSelectedIncome(income);
         setIsModalOpen(true);
     };
@@ -85,17 +83,15 @@ const IncomeDocument = ({currentUser}) => {
     };
 
     const handleUpdateIncome = (updatedIncome) => {
-        console.log(updatedIncome)
-        setIncomes(prevIncomes =>
-            prevIncomes.map(income =>
-                income.id === updatedIncome?.id ? updatedIncome : income
-            )
-        );
-        setFilteredIncomes(prevIncomes =>
-            prevIncomes.map(income =>
-                income.id === updatedIncome?.id ? updatedIncome : income
-            )
-        );
+        setIncomes(prevIncomes => [
+            updatedIncome,
+            ...prevIncomes.filter(income => income.id !== updatedIncome?.id)
+        ]);
+
+        setFilteredIncomes(prevIncomes => [
+            updatedIncome,
+            ...prevIncomes.filter(income => income.id !== updatedIncome?.id)
+        ]);
     };
 
     return (
@@ -149,7 +145,7 @@ const IncomeDocument = ({currentUser}) => {
                                     Просмотр
                                 </Button>
                                 <Button
-                                    disabled={currentUser.position === 'Бухгалтер' || currentUser.position === 'Директор' ? true : false}
+                                    disabled={currentUser.position === 'Бухгалтер' || currentUser.position === 'Директор' || currentUser.position === 'Учредитель'}
                                     size="sm"
                                     color="green"
                                     onClick={() => handleEditIncome(income)}>
