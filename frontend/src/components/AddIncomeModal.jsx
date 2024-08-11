@@ -461,7 +461,7 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
                                     <div className="w-full">
                                         <Input
                                             type="text"
-                                            label="KPI продукта"
+                                            label="ИКПУ продукта"
                                             name="kpi"
                                             value={product.kpi}
                                             onChange={(e) => handleProductChange(index, e)}
