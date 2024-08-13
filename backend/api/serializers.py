@@ -3,6 +3,7 @@ from django.contrib.auth.models import User
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
+from django.db import transaction
 from warehouse.models import Company, Product, ProductMarking, Income, Outcome, CustomUser
 
 
@@ -43,28 +44,38 @@ class IncomeSerializer(serializers.ModelSerializer):
         product_markings = ProductMarking.objects.filter(income=obj)
         return ProductMarkingSerializer(product_markings, many=True).data
 
+    @transaction.atomic
     def create(self, validated_data):
         company_data = validated_data.pop('from_company')
         products_data = validated_data.pop('products')
-
+        # Ищем существующую компанию или создаем новую
         company, created = Company.objects.get_or_create(**company_data)
         income = Income.objects.create(from_company=company, **validated_data)
 
         for product_data in products_data:
             markings_data = product_data.pop('markings', [])
+
+            # Ищем существующий продукт или создаем новый
             product, created = Product.objects.get_or_create(**product_data)
+
             for marking_data in markings_data:
                 marking_value = marking_data.get('marking')
+
+                # Проверяем, существует ли уже такая маркировка
                 if ProductMarking.objects.filter(marking=marking_value).exists():
                     raise ValidationError(f'Маркировка "{marking_value}" уже существует.')
+
+                # Создаем новую маркировку
                 ProductMarking.objects.create(product=product, income=income, **marking_data)
 
         return income
 
+    @transaction.atomic
     def update(self, instance, validated_data):
         company_data = validated_data.pop('from_company')
         products_data = validated_data.pop('products', None)
 
+        # Обновляем данные компании
         company, created = Company.objects.get_or_create(**company_data)
         instance.from_company = company
         instance.contract_date = validated_data.get('contract_date', instance.contract_date)
@@ -77,14 +88,23 @@ class IncomeSerializer(serializers.ModelSerializer):
         instance.save()
 
         if products_data:
-            ProductMarking.objects.filter(income=instance).delete()  # Удаляем старые записи ProductMarking
+            # Удаляем старые записи ProductMarking
+            ProductMarking.objects.filter(income=instance).delete()
+
             for product_data in products_data:
                 markings_data = product_data.pop('markings', [])
+
+                # Ищем существующий продукт или создаем новый
                 product, created = Product.objects.get_or_create(**product_data)
+
                 for marking_data in markings_data:
                     marking_value = marking_data.get('marking')
+
+                    # Проверяем, существует ли уже такая маркировка
                     if ProductMarking.objects.filter(marking=marking_value).exists():
                         raise ValidationError(f'Маркировка "{marking_value}" уже существует.')
+
+                    # Создаем новую маркировку
                     ProductMarking.objects.create(product=product, income=instance, **marking_data)
 
         return instance

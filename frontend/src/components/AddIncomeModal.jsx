@@ -4,6 +4,7 @@ import {Dialog, DialogHeader, DialogBody, DialogFooter, Button, Input} from '@ma
 import {createIncome, getCompanies, getProducts, checkMarkingExists} from '../api/api';
 import AddCompanyModal from './AddCompanyModal';
 import AddProductModal from './AddProductModal';
+import * as XLSX from 'xlsx';
 
 const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
     const [formData, setFormData] = useState({
@@ -38,6 +39,8 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
     const [manualTotal, setManualTotal] = useState(false);
     const [error, setError] = useState('');
     const [markingErrors, setMarkingErrors] = useState({});
+    const [validationErrors, setValidationErrors] = useState({});
+    const [fileInputKey, setFileInputKey] = useState(Date.now());
 
     useEffect(() => {
         if (isOpen) {
@@ -91,6 +94,15 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
         }));
     };
 
+    const handleTotalChange = (e) => {
+        const {value} = e.target;
+        setFormData((prevData) => ({
+            ...prevData,
+            total: parseFloat(value),
+        }));
+        setManualTotal(true);
+    };
+
     const handleProductSelect = async (index, selectedProductId) => {
         const selectedProduct = productOptions.find(product => product.value === selectedProductId);
 
@@ -109,6 +121,7 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
                 products: newProducts,
                 total: manualTotal ? prevData.total : calculateTotal(newProducts),
             }));
+            setFileInputKey(Date.now()); // Сброс ключа для обновления инпута файла
         }
     };
 
@@ -127,34 +140,6 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
                 },
             ],
         }));
-    };
-
-    const handleAddNewProduct = (newProduct) => {
-        setProductOptions((prevOptions) => [
-            ...prevOptions,
-            {
-                value: newProduct.id,
-                label: newProduct.name,
-                kpi: newProduct.kpi,
-                price: newProduct.price,
-            },
-        ]);
-        setFormData((prevData) => {
-            const newProducts = [...prevData.products];
-            newProducts[newProducts.length - 1] = {
-                id: newProduct.id,
-                name: newProduct.name,
-                kpi: newProduct.kpi,
-                price: newProduct.price,
-                quantity: '',
-                markings: [],
-            };
-            return {
-                ...prevData,
-                products: newProducts,
-            };
-        });
-        setIsAddProductModalOpen(false);
     };
 
     const handleChange = (e) => {
@@ -189,6 +174,21 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
         const newProducts = [...formData.products];
         newProducts[index][name] = value;
 
+        // Валидация поля ИКПУ (должно быть числовым)
+        if (name === 'kpi') {
+            if (!/^\d+$/.test(value)) {
+                setValidationErrors((prevErrors) => ({
+                    ...prevErrors,
+                    [`kpi-${index}`]: 'ИКПУ должно содержать только цифры.',
+                }));
+            } else {
+                setValidationErrors((prevErrors) => {
+                    const {[`kpi-${index}`]: _, ...restErrors} = prevErrors;
+                    return restErrors;
+                });
+            }
+        }
+
         if (name === 'quantity') {
             const quantity = parseInt(value, 10);
             newProducts[index].markings = Array.from({length: quantity}, (_, i) => ({
@@ -218,42 +218,46 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
         }));
     };
 
-    const handleRemoveProduct = (index) => {
+    const handleFileUpload = (event, productIndex) => {
+        const file = event.target.files[0];
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const data = e.target.result;
+            const workbook = XLSX.read(data, {type: 'binary'});
+            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            const jsonData = XLSX.utils.sheet_to_json(firstSheet, {header: 1});
+            const markings = jsonData.map(row => row[0]).filter(marking => marking);
+            const markingCount = markings.length;
+
+            autoFillMarkings(markings, productIndex, markingCount);
+        };
+        reader.readAsBinaryString(file);
+    };
+
+    const autoFillMarkings = (markingsArray, productIndex, markingCount) => {
+        const newProducts = [...formData.products];
+        const product = newProducts[productIndex];
+
+        product.quantity = markingCount;
+
+        for (let j = 0; j < product.markings.length && j < markingCount; j++) {
+            product.markings[j].marking = markingsArray[j];
+        }
+
+        while (product.markings.length < markingCount) {
+            product.markings.push({marking: markingsArray[product.markings.length]});
+        }
+
+        product.totalPrice = parseFloat(product.price) * markingCount;
+
         setFormData((prevData) => {
-            const updatedProducts = prevData.products.filter((_, i) => i !== index);
-            return {
+            const updatedData = {
                 ...prevData,
-                products: updatedProducts,
-                total: calculateTotal(updatedProducts),
+                products: newProducts,
+                total: calculateTotal(newProducts),
             };
+            return updatedData;
         });
-
-        setManualTotal(false);
-    };
-
-    const handleTotalChange = (e) => {
-        const {value} = e.target;
-        setFormData((prevData) => ({
-            ...prevData,
-            total: parseFloat(value),
-        }));
-        setManualTotal(true);
-    };
-
-    const filterProducts = (products) => {
-        const productMap = {};
-
-        products.forEach(product => {
-            const {name, quantity} = product;
-
-            if (!productMap[name]) {
-                productMap[name] = product;
-            } else if (quantity === 0) {
-                productMap[name] = product;
-            }
-        });
-
-        return Object.values(productMap);
     };
 
     const checkInternalDuplicateMarkings = () => {
@@ -295,23 +299,48 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
         return Object.keys(errors).length === 0;
     };
 
+    const filterProducts = (products) => {
+        const productMap = {};
+
+        products.forEach(product => {
+            const {name, quantity} = product;
+
+            if (!productMap[name]) {
+                productMap[name] = product;
+            } else if (quantity === 0) {
+                productMap[name] = product;
+            }
+        });
+
+        return Object.values(productMap);
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        const isValidInternal = checkInternalDuplicateMarkings();
-        if (!isValidInternal) {
-            setError('Найдены дубликаты маркировок в форме.');
+        // Проверка на ошибки валидации
+        if (Object.keys(validationErrors).length > 0) {
+            setError('Исправьте ошибки в форме перед отправкой.');
             return;
         }
 
+        // Проверка на внутренние дубликаты маркировок
+        const isValidInternal = checkInternalDuplicateMarkings();
+        if (!isValidInternal) {
+            setError('Найдены дубликаты маркировок в форме.');
+            return; // Прекращение выполнения, если есть ошибки
+        }
+
+        // Проверка на дубликаты маркировок в базе данных
         const isValid = await checkDuplicateMarkings();
         if (!isValid) {
             setError('Найдены ошибки в маркировках.');
-            return;
+            return; // Прекращение выполнения, если есть ошибки
         }
 
         const filteredProducts = filterProducts(formData.products);
 
+        // Подготовка данных для отправки
         const dataToSubmit = {
             ...formData,
             total: parseFloat(formData.total),
@@ -326,7 +355,7 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
 
         if (!dataToSubmit.from_company.name) {
             setError('Не выбрана компания.');
-            return;
+            return; // Прекращение выполнения, если есть ошибки
         }
 
         try {
@@ -347,24 +376,6 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
             }
             console.error('Error adding income:', error.response?.data || error.message);
         }
-    };
-
-    const handleOpenAddCompanyModal = (e) => {
-        e.stopPropagation();
-        setIsAddCompanyModalOpen(true);
-    };
-
-    const handleCloseAddCompanyModal = () => {
-        setIsAddCompanyModalOpen(false);
-    };
-
-    const handleOpenAddProductModal = (e) => {
-        e.stopPropagation();
-        setIsAddProductModalOpen(true);
-    };
-
-    const handleCloseAddProductModal = () => {
-        setIsAddProductModalOpen(false);
     };
 
     return (
@@ -392,7 +403,7 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
                             <Button
                                 size='md'
                                 type="button"
-                                onClick={handleOpenAddCompanyModal}
+                                onClick={() => setIsAddCompanyModalOpen(true)}
                                 color="green"
                                 className="ml-2"
                             >
@@ -494,7 +505,7 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
                                     <Button
                                         size='md'
                                         type="button"
-                                        onClick={handleOpenAddProductModal}
+                                        onClick={() => setIsAddProductModalOpen(true)}
                                         color="green"
                                         className=""
                                     >
@@ -504,6 +515,7 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
                                 <div className="flex items-center mb-2 space-x-4">
                                     <div className="w-full">
                                         <Input
+                                            disabled
                                             type="text"
                                             label="ИКПУ продукта"
                                             name="kpi"
@@ -511,6 +523,11 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
                                             onChange={(e) => handleProductChange(index, e)}
                                             required
                                         />
+                                        {validationErrors[`kpi-${index}`] && (
+                                            <div className="text-red-500 mt-1">
+                                                {validationErrors[`kpi-${index}`]}
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="w-full">
                                         <Input
@@ -552,12 +569,22 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
                                         )}
                                     </div>
                                 ))}
+                                <div className="mt-2">
+                                    <Input
+                                        key={fileInputKey}
+                                        type="file"
+                                        label="Загрузить маркировки из Excel"
+                                        name={`excelFile-${index}`}
+                                        accept=".xlsx, .xls"
+                                        onChange={(e) => handleFileUpload(e, index)}
+                                    />
+                                </div>
                                 <Button
                                     type="button"
                                     onClick={() => handleRemoveProduct(index)}
                                     color="red"
                                     size="sm"
-                                    className=""
+                                    className="mt-4"
                                 >
                                     Удалить
                                 </Button>
@@ -580,7 +607,7 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
                             />
                         </div>
                     </form>
-                    {error && <div className="text-red-500 mt-2 text-center">{error}</div>} {/* Error display */}
+                    {error && <div className="text-red-500 mt-2 text-center">{error}</div>}
                 </DialogBody>
                 <DialogFooter className='flex justify-end space-x-4'>
                     <Button
@@ -601,7 +628,7 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
             </Dialog>
             <AddCompanyModal
                 isOpen={isAddCompanyModalOpen}
-                onClose={handleCloseAddCompanyModal}
+                onClose={() => setIsAddCompanyModalOpen(false)}
                 onAddCompany={(newCompany) => {
                     setCompanyOptions((prevOptions) => [
                         ...prevOptions,
@@ -625,8 +652,33 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
             />
             <AddProductModal
                 isOpen={isAddProductModalOpen}
-                onClose={handleCloseAddProductModal}
-                onAddProduct={handleAddNewProduct}
+                onClose={() => setIsAddProductModalOpen(false)}
+                onAddProduct={(newProduct) => {
+                    setProductOptions((prevOptions) => [
+                        ...prevOptions,
+                        {
+                            value: newProduct.id,
+                            label: newProduct.name,
+                            kpi: newProduct.kpi,
+                            price: newProduct.price,
+                        },
+                    ]);
+                    setFormData((prevData) => {
+                        const newProducts = [...prevData.products];
+                        newProducts[newProducts.length - 1] = {
+                            id: newProduct.id,
+                            name: newProduct.name,
+                            kpi: newProduct.kpi,
+                            price: newProduct.price,
+                            quantity: '',
+                            markings: [],
+                        };
+                        return {
+                            ...prevData,
+                            products: newProducts,
+                        };
+                    });
+                }}
             />
         </>
     );
