@@ -1,6 +1,8 @@
 import axios from 'axios';
 
 
+// const API_URL = ' http://127.0.0.1:8000/api/v1';
+
 const API_URL = 'https://banzay.pythonanywhere.com/api/v1';
 
 const axiosInstance = axios.create({
@@ -9,6 +11,7 @@ const axiosInstance = axios.create({
         'Content-Type': 'application/json',
     },
 });
+
 
 export const getCompanies = () => axiosInstance.get('/companies/');
 export const createCompany = (data) => axiosInstance.post('/companies/', data);
@@ -35,6 +38,11 @@ export const updateMarking = async (incomeId, productId, markingId, newMarking) 
         throw error;
     }
 };
+
+export const checkMarkingExists = (marking) => {
+    return axiosInstance.get(`/product-markings/check-marking/${marking}/`);
+};
+
 
 export const deleteMarking = async (incomeId, productId, markingId) => {
     try {

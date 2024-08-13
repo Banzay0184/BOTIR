@@ -1,7 +1,7 @@
 import React, {useState, useEffect} from 'react';
 import Select from 'react-select';
 import {Dialog, DialogHeader, DialogBody, DialogFooter, Button, Input} from '@material-tailwind/react';
-import {createIncome, getCompanies, getProducts} from '../api/api';
+import {createIncome, getCompanies, getProducts, checkMarkingExists} from '../api/api'; // Добавьте функцию проверки маркировок
 import AddCompanyModal from './AddCompanyModal';
 import AddProductModal from './AddProductModal';
 
@@ -34,9 +34,10 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
     const [companyOptions, setCompanyOptions] = useState([]);
     const [productOptions, setProductOptions] = useState([]);
     const [isAddCompanyModalOpen, setIsAddCompanyModalOpen] = useState(false);
-    const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false); // New state for product modal
+    const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
     const [manualTotal, setManualTotal] = useState(false);
     const [error, setError] = useState('');
+    const [markingErrors, setMarkingErrors] = useState({});
 
     useEffect(() => {
         if (isOpen) {
@@ -58,16 +59,13 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
             const fetchProducts = async () => {
                 try {
                     const response = await getProducts();
-
-                    // Фильтруем продукты, оставляя только те, у которых quantity = 0
                     const filteredProducts = response.data.filter(product => product.quantity === 0);
-
                     const options = filteredProducts.map(product => ({
                         value: product.id,
                         label: product.name,
                         kpi: product.kpi,
                         price: product.price,
-                        quantity: product.quantity,  // Можно оставить, если нужно показывать количество
+                        quantity: product.quantity,
                     }));
                     setProductOptions(options);
                 } catch (error) {
@@ -79,7 +77,6 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
             fetchProducts();
         }
     }, [isOpen]);
-
 
     const handleCompanyChange = (selectedOption) => {
         const selectedCompany = companyOptions.find(company => company.value === selectedOption.value);
@@ -104,8 +101,8 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
                 name: selectedProduct.label,
                 kpi: selectedProduct.kpi,
                 price: selectedProduct.price,
-                quantity: '',  // Reset quantity
-                markings: [],  // Reset markings to allow new entries
+                quantity: '',
+                markings: [],
             };
             setFormData((prevData) => ({
                 ...prevData,
@@ -259,8 +256,37 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
         return Object.values(productMap);
     };
 
+    // Функция проверки дубликатов маркировок
+    const checkDuplicateMarkings = async () => {
+        const errors = {};
+        for (let i = 0; i < formData.products.length; i++) {
+            for (let j = 0; j < formData.products[i].markings.length; j++) {
+                const marking = formData.products[i].markings[j].marking;
+                if (marking) { // Проверяем, что поле маркировки не пустое
+                    try {
+                        const response = await checkMarkingExists(marking); // Ваша функция для проверки маркировки
+                        if (response.data.exists) {
+                            errors[`${i}-${j}`] = `Маркировка "${marking}" уже существует.`;
+                        }
+                    } catch (error) {
+                        console.error('Ошибка проверки маркировки:', error);
+                    }
+                }
+            }
+        }
+        setMarkingErrors(errors);
+        return Object.keys(errors).length === 0;
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
+
+        // Проверяем дубликаты маркировок
+        const isValid = await checkDuplicateMarkings();
+        if (!isValid) {
+            setError('Найдены ошибки в маркировках.');
+            return;
+        }
 
         // Фильтруем продукты перед отправкой на сервер
         const filteredProducts = filterProducts(formData.products);
@@ -292,8 +318,6 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
                 const errorData = error.response.data;
                 if (errorData.non_field_errors) {
                     setError(errorData.non_field_errors[0]);
-                } else if (errorData.markings) {
-                    setError('Маркировка должна быть уникальной.');
                 } else {
                     setError('Произошла ошибка при добавлении дохода.');
                 }
@@ -303,7 +327,6 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
             console.error('Error adding income:', error.response?.data || error.message);
         }
     };
-
 
     const handleOpenAddCompanyModal = (e) => {
         e.stopPropagation();
@@ -501,6 +524,11 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
                                             onChange={(e) => handleMarkingChange(index, markingIndex, e)}
                                             required
                                         />
+                                        {markingErrors[`${index}-${markingIndex}`] && (
+                                            <div className="text-red-500 mt-1">
+                                                {markingErrors[`${index}-${markingIndex}`]}
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                                 <Button

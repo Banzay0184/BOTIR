@@ -25,6 +25,7 @@ const AddProductModal = ({isOpen, onClose, onAddProduct}) => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+
         try {
             const response = await createProduct(productData);
             onAddProduct(response.data); // Передаем новый продукт обратно в родительский компонент
@@ -42,13 +43,14 @@ const AddProductModal = ({isOpen, onClose, onAddProduct}) => {
                 }
                 if (serverErrors.price) {
                     newErrors.price = serverErrors.price[0];
-                error
+                    error
                 }
                 setErrors(newErrors);
             } else {
                 console.error('Ошибка при добавлении продукта:', error.message);
             }
         }
+        console.log(e.target.reset(), error );
     };
 
     return (

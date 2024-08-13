@@ -2,6 +2,7 @@
 from django.contrib.auth.models import User
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework import serializers
+from rest_framework.exceptions import ValidationError
 from warehouse.models import Company, Product, ProductMarking, Income, Outcome, CustomUser
 
 
@@ -53,6 +54,9 @@ class IncomeSerializer(serializers.ModelSerializer):
             markings_data = product_data.pop('markings', [])
             product, created = Product.objects.get_or_create(**product_data)
             for marking_data in markings_data:
+                marking_value = marking_data.get('marking')
+                if ProductMarking.objects.filter(marking=marking_value).exists():
+                    raise ValidationError(f'Маркировка "{marking_value}" уже существует.')
                 ProductMarking.objects.create(product=product, income=income, **marking_data)
 
         return income
@@ -78,6 +82,9 @@ class IncomeSerializer(serializers.ModelSerializer):
                 markings_data = product_data.pop('markings', [])
                 product, created = Product.objects.get_or_create(**product_data)
                 for marking_data in markings_data:
+                    marking_value = marking_data.get('marking')
+                    if ProductMarking.objects.filter(marking=marking_value).exists():
+                        raise ValidationError(f'Маркировка "{marking_value}" уже существует.')
                     ProductMarking.objects.create(product=product, income=instance, **marking_data)
 
         return instance
