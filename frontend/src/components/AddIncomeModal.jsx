@@ -1,7 +1,7 @@
 import React, {useState, useEffect} from 'react';
 import Select from 'react-select';
 import {Dialog, DialogHeader, DialogBody, DialogFooter, Button, Input} from '@material-tailwind/react';
-import {createIncome, getCompanies, getProducts, checkMarkingExists} from '../api/api'; // Добавьте функцию проверки маркировок
+import {createIncome, getCompanies, getProducts, checkMarkingExists} from '../api/api';
 import AddCompanyModal from './AddCompanyModal';
 import AddProductModal from './AddProductModal';
 
@@ -256,17 +256,34 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
         return Object.values(productMap);
     };
 
-    // Функция проверки дубликатов маркировок
+    const checkInternalDuplicateMarkings = () => {
+        const errors = {};
+        const seenMarkings = new Set();
+
+        formData.products.forEach((product, productIndex) => {
+            product.markings.forEach((marking, markingIndex) => {
+                if (seenMarkings.has(marking.marking)) {
+                    errors[`${productIndex}-${markingIndex}`] = `Маркировка "${marking.marking}" уже добавлена в форме.`;
+                } else {
+                    seenMarkings.add(marking.marking);
+                }
+            });
+        });
+
+        setMarkingErrors(errors);
+        return Object.keys(errors).length === 0;
+    };
+
     const checkDuplicateMarkings = async () => {
         const errors = {};
         for (let i = 0; i < formData.products.length; i++) {
             for (let j = 0; j < formData.products[i].markings.length; j++) {
                 const marking = formData.products[i].markings[j].marking;
-                if (marking) { // Проверяем, что поле маркировки не пустое
+                if (marking) {
                     try {
-                        const response = await checkMarkingExists(marking); // Ваша функция для проверки маркировки
+                        const response = await checkMarkingExists(marking);
                         if (response.data.exists) {
-                            errors[`${i}-${j}`] = `Маркировка "${marking}" уже существует.`;
+                            errors[`${i}-${j}`] = `Маркировка "${marking}" уже существует в базе данных.`;
                         }
                     } catch (error) {
                         console.error('Ошибка проверки маркировки:', error);
@@ -281,14 +298,18 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        // Проверяем дубликаты маркировок
+        const isValidInternal = checkInternalDuplicateMarkings();
+        if (!isValidInternal) {
+            setError('Найдены дубликаты маркировок в форме.');
+            return;
+        }
+
         const isValid = await checkDuplicateMarkings();
         if (!isValid) {
             setError('Найдены ошибки в маркировках.');
             return;
         }
 
-        // Фильтруем продукты перед отправкой на сервер
         const filteredProducts = filterProducts(formData.products);
 
         const dataToSubmit = {
@@ -311,7 +332,7 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
         try {
             const response = await createIncome(dataToSubmit);
             console.log('Income created successfully:', response.data);
-            onAddIncome(response.data);  // Уведомляем родительский компонент
+            onAddIncome(response.data);
             onClose();
         } catch (error) {
             if (error.response && error.response.data) {
@@ -561,7 +582,7 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
                     </form>
                     {error && <div className="text-red-500 mt-2 text-center">{error}</div>} {/* Error display */}
                 </DialogBody>
-                <DialogFooter className=' flex justify-end space-x-4 '>
+                <DialogFooter className='flex justify-end space-x-4'>
                     <Button
                         form="income-form"
                         type="submit"
