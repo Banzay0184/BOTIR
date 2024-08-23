@@ -18,6 +18,9 @@ ALLOWED_HOSTS = []
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
+    "https://www.scclms.uz/",
+    "https://scclms.uz/",
+    "https://botir-chi.vercel.app/",
 ]
 
 CORS_ALLOWED_CREDENTIALS = True
