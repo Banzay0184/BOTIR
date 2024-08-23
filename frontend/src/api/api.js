@@ -1,9 +1,9 @@
 import axios from 'axios';
 
 
-// const API_URL = ' http://127.0.0.1:8000/api/v1';
+const API_URL = ' http://127.0.0.1:8000/api/v1';
 
-const API_URL = 'https://banzay.pythonanywhere.com/api/v1';
+// const API_URL = 'https://banzay.pythonanywhere.com/api/v1';
 
 const axiosInstance = axios.create({
     baseURL: API_URL,
@@ -41,16 +41,6 @@ export const updateMarking = async (incomeId, productId, markingId, newMarking) 
 
 export const checkMarkingExists = (marking) => {
     return axiosInstance.get(`/product-markings/check-marking/${marking}/`);
-};
-
-
-export const deleteMarking = async (incomeId, productId, markingId) => {
-    try {
-        await axiosInstance.delete(`/incomes/${incomeId}/products/${productId}/markings/${markingId}/`);
-    } catch (error) {
-        console.error('Error deleting marking:', error.response?.data || error.message);
-        throw error;
-    }
 };
 
 // Добавляем API функции для Outcome
@@ -128,3 +118,16 @@ class AuthService {
 }
 
 export default new AuthService();
+
+
+export const deleteMarking = async (incomeId, productId, markingId) => {
+    try {
+        const response = await axiosInstance.delete(
+            `/incomes/${incomeId}/products/${productId}/markings/${markingId}/`
+        );
+        return response.data;
+    } catch (error) {
+        console.error('Error deleting marking:', error.response?.data || error.message);
+        throw error;
+    }
+};

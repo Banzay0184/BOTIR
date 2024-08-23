@@ -28,6 +28,8 @@ class ProductViewSet(viewsets.ModelViewSet):
 class ProductMarkingViewSet(viewsets.ModelViewSet):
     queryset = ProductMarking.objects.all()
     serializer_class = ProductMarkingSerializer
+    permission_classes = [AllowAny]
+    http_method_names = ['get', 'post', 'put', 'delete']
 
 
 class IncomeViewSet(viewsets.ModelViewSet):
@@ -52,17 +54,6 @@ class UpdateMarkingView(APIView):
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-class MarkingDetail(APIView):
-    def delete(self, request, income_id, product_id, marking_id, format=None):
-        try:
-            marking = ProductMarking.objects.get(id=marking_id, income_id=income_id, product_id=product_id)
-            print(marking)
-            marking.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        except ProductMarking.DoesNotExist:
-            return Response(status=status.HTTP_404_NOT_FOUND)
 
 
 class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -132,3 +123,14 @@ def logout_view(request):
 def check_marking_exists(request, marking):
     exists = ProductMarking.objects.filter(marking=marking).exists()
     return Response({'exists': exists})
+
+
+class DeleteMarkingView(APIView):
+    def delete(self, request, income_id, product_id, marking_id, format=None):
+        try:
+            # Извлечение объектов по их ID
+            marking = ProductMarking.objects.get(id=marking_id, product_id=product_id, income_id=income_id)
+            marking.delete()  # Удаление маркировки
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except ProductMarking.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)

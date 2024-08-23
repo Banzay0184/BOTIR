@@ -28,17 +28,6 @@ const MarkingEditModal = ({ isOpen, onClose, marking, onSave, onDelete }) => {
         }
     };
 
-    const handleDelete = async () => {
-        if (marking) {
-            try {
-                await onDelete(marking.id);
-                onClose(); // Закрываем только если не было ошибок
-            } catch (error) {
-                setError('Произошла ошибка при удалении маркировки.');
-            }
-        }
-    };
-
     return (
         <Dialog open={isOpen} handler={onClose} onClose={onClose}>
             <DialogHeader>Изменить маркировку товара</DialogHeader>
@@ -54,7 +43,6 @@ const MarkingEditModal = ({ isOpen, onClose, marking, onSave, onDelete }) => {
             </DialogBody>
             <DialogFooter className="space-x-2">
                 <Button className="bg-green-500" onClick={handleSave} disabled={!newMarking}>Сохранить</Button>
-                <Button color="red" onClick={handleDelete}>Удалить</Button>
                 <Button onClick={onClose}>Отмена</Button>
             </DialogFooter>
         </Dialog>

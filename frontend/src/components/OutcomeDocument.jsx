@@ -143,7 +143,7 @@ const OutcomeDocument = ({currentUser}) => {
                             <td className="py-2 px-4 border">{outcome.contract_number}</td>
                             <td className="py-2 px-4 border">{outcome.invoice_date}</td>
                             <td className="py-2 px-4 border">{outcome.invoice_number}</td>
-                            <td className="py-2 px-4 border">{outcome.total}</td>
+                            <td className="py-2 px-4 border">{outcome.total.toLocaleString()} сум.</td>
                             <td className="py-2 px-4 border flex flex-col gap-2">
                                 <Button size="sm" color="blue" onClick={() => handleViewDetails(outcome)}>
                                     Просмотр

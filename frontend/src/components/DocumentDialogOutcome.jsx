@@ -1,34 +1,41 @@
-import React, {useEffect, useState} from 'react';
-import {Dialog, DialogHeader, DialogBody, DialogFooter, Button} from '@material-tailwind/react';
-import {getProducts} from '../api/api.js';  // Импортируем функцию для получения данных о продукте
+import React, { useEffect, useState } from 'react';
+import { Dialog, DialogHeader, DialogBody, DialogFooter, Button } from '@material-tailwind/react';
+import { getProducts } from '../api/api.js';
 
-const DocumentDialogOutcome = ({isOpen, onClose, outcome}) => {
+const DocumentDialogOutcome = ({ isOpen, onClose, outcome }) => {
     const [productDetails, setProductDetails] = useState([]);
 
     useEffect(() => {
         const fetchProductDetails = async () => {
             try {
-                const products = await getProducts(); // Получаем все продукты
-                const details = outcome.product_markings.map((marking) => {
+                const products = await getProducts(); // Fetch all products
+                console.log('Fetched Products:', products.data);
+
+                // Map each marking to its respective product and count the markings per product
+                const details = outcome.product_markings.reduce((acc, marking) => {
                     const product = products.data.find((p) => p.id === marking.product);
                     if (!product) {
-                        return null;
+                        console.warn(`Product with ID ${marking.product} not found`);
+                        return acc;
                     }
-                    return {
-                        id: product.id,
-                        product_name: product.name,
-                        kpi: product.kpi,
-                        price: product.price,
-                        quantity: product.quantity,
-                    };
-                });
 
-                // Удаляем дубликаты по ID продукта
-                const uniqueDetails = details.filter((detail, index, self) =>
-                    index === self.findIndex((d) => d && d.id === detail.id)
-                );
+                    // Find if the product already exists in the acc array
+                    const existingProduct = acc.find((item) => item.id === product.id);
+                    if (existingProduct) {
+                        existingProduct.quantity += 1; // Increment the count of markings
+                    } else {
+                        acc.push({
+                            id: product.id,
+                            product_name: product.name,
+                            kpi: product.kpi,
+                            price: product.price,
+                            quantity: 1, // Start with one marking
+                        });
+                    }
+                    return acc;
+                }, []);
 
-                setProductDetails(uniqueDetails);
+                setProductDetails(details);
             } catch (error) {
                 console.error('Failed to fetch product details:', error);
             }
@@ -70,12 +77,12 @@ const DocumentDialogOutcome = ({isOpen, onClose, outcome}) => {
                             <th className='text-center border border-gray-300'>Название товара</th>
                             <th className='text-center border border-gray-300'>ИКПУ</th>
                             <th className='text-center border border-gray-300'>Единица измерения</th>
-                            <th className='text-center border border-gray-300'>Количество</th>
+                            <th className='text-center border border-gray-300'>Количество маркировок</th>
                             <th className='text-center border border-gray-300'>Цена</th>
                             <th className='text-center border border-gray-300'>Общая стоимость</th>
                         </tr>
                         </thead>
-                        <tbody className=' '>
+                        <tbody className=''>
                         {productDetails && productDetails.length > 0 ? (
                             productDetails.map((detail, index) => (
                                 <tr key={detail.id}>

@@ -73,7 +73,7 @@ export default function IncomeList({currentUser}) {
                             onClick={() => setOutcomeModalOpen(true)}
                             disabled={selectedMarkings.length === 0 || currentUser.position === 'Директор' || currentUser.position === 'Учредитель'}
                         >
-                            Расход
+                            Расход ({selectedMarkings.length})
                         </Button>
                     </div>
                     <Typography variant="small" color="blue-gray" className="font-normal mt-4">
