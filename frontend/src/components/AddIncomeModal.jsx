@@ -208,6 +208,17 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
         setManualTotal(false);
     };
 
+    const handleRemoveProduct = (index) => {
+        const newProducts = [...formData.products];
+        newProducts.splice(index, 1);
+        setFormData((prevData) => ({
+            ...prevData,
+            products: newProducts,
+            total: manualTotal ? prevData.total : calculateTotal(newProducts),
+        }));
+    };
+
+
     const handleMarkingChange = (productIndex, markingIndex, e) => {
         const {value} = e.target;
         const newProducts = [...formData.products];
@@ -492,6 +503,7 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
 
                         {formData.products.map((product, index) => (
                             <div key={index} className="mb-4 p-4 border rounded-lg">
+                                <h1 className=' text-lg font-bold mb-4 text-blue-500 '>Продукт {index + 1}</h1>
                                 <div className="flex items-center mb-2 space-x-2">
                                     <div className="w-full">
                                         <Select

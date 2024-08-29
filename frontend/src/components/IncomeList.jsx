@@ -59,7 +59,7 @@ export default function IncomeList({currentUser}) {
                             placeholder="Поиск..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="p-2 border rounded"
+                            className="p-2 border rounded w-4/12"
                         />
                         <Button
                             disabled={currentUser.position === 'Директор' || currentUser.position === 'Учредитель'}

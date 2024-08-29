@@ -101,7 +101,19 @@ const DocumentDialogOutcome = ({ isOpen, onClose, outcome }) => {
                             </tr>
                         )}
                         <tr>
-                            <td colSpan="6" className="text-left font-bold">Общая стоимость всех товаров:</td>
+                            <td colSpan="4" className="text-left font-bold">Общая стоимость всех товаров:</td>
+
+                            <td className="font-bold text-center">
+                                {productDetails && productDetails.length > 0
+                                    ? productDetails.reduce((total, detail) => {
+                                    if (detail.quantity) {
+                                        return total + detail.quantity;
+                                    }
+                                    return total;
+                                }, 0).toLocaleString() + ' шт.'
+                                    : 'N/A'}
+                            </td>
+                            <td></td>
                             <td className="font-bold text-center">{outcome.total ? outcome.total.toLocaleString() : 'N/A'} сум.</td>
                         </tr>
                         </tbody>
