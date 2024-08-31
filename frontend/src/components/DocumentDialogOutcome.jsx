@@ -49,8 +49,8 @@ const DocumentDialogOutcome = ({ isOpen, onClose, outcome }) => {
     if (!outcome) return null;
 
     return (
-        <Dialog open={isOpen} handler={onClose} size="xl" className="overflow-auto">
-            <DialogHeader className='flex justify-between'>
+        <Dialog open={isOpen} handler={onClose} size="xl" className="flex-1 overflow-y-auto max-h-[calc(100vh-200px)]">
+            <DialogHeader className='flex justify-between'>d
                 <p>Документ</p>
                 <svg onClick={onClose} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                      strokeWidth={1.5} stroke="currentColor" className="size-6 cursor-pointer">

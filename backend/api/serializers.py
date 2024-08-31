@@ -32,6 +32,7 @@ class ProductMarkingSerializer(serializers.ModelSerializer):
 
 
 class IncomeSerializer(serializers.ModelSerializer):
+    added_by = serializers.StringRelatedField()
     from_company = CompanySerializer()
     products = serializers.ListField(child=serializers.DictField(), write_only=True)
     product_markings = serializers.SerializerMethodField()
@@ -48,24 +49,26 @@ class IncomeSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         company_data = validated_data.pop('from_company')
         products_data = validated_data.pop('products')
-        # Ищем существующую компанию или создаем новую
+        user = self.context['request'].user  # Получаем текущего пользователя
+
+        # Проверка аутентификации пользователя
+        if not user.is_authenticated:
+            raise ValidationError("Пользователь должен быть аутентифицирован для создания записи.")
+
         company, created = Company.objects.get_or_create(**company_data)
-        income = Income.objects.create(from_company=company, **validated_data)
+        income = Income.objects.create(from_company=company, added_by=user, **validated_data)
 
         for product_data in products_data:
             markings_data = product_data.pop('markings', [])
 
-            # Ищем существующий продукт или создаем новый
             product, created = Product.objects.get_or_create(**product_data)
 
             for marking_data in markings_data:
                 marking_value = marking_data.get('marking')
 
-                # Проверяем, существует ли уже такая маркировка
                 if ProductMarking.objects.filter(marking=marking_value).exists():
                     raise ValidationError(f'Маркировка "{marking_value}" уже существует.')
 
-                # Создаем новую маркировку
                 ProductMarking.objects.create(product=product, income=income, **marking_data)
 
         return income
@@ -75,7 +78,6 @@ class IncomeSerializer(serializers.ModelSerializer):
         company_data = validated_data.pop('from_company')
         products_data = validated_data.pop('products', None)
 
-        # Обновляем данные компании
         company, created = Company.objects.get_or_create(**company_data)
         instance.from_company = company
         instance.contract_date = validated_data.get('contract_date', instance.contract_date)
@@ -88,23 +90,23 @@ class IncomeSerializer(serializers.ModelSerializer):
         instance.save()
 
         if products_data:
-            # Удаляем старые записи ProductMarking
-            ProductMarking.objects.filter(income=instance).delete()
+            existing_markings = set(ProductMarking.objects.filter(income=instance).values_list('marking', flat=True))
+            new_markings = {marking['marking'] for product in products_data for marking in product.get('markings', [])}
+
+            markings_to_delete = existing_markings - new_markings
+            ProductMarking.objects.filter(income=instance, marking__in=markings_to_delete).delete()
 
             for product_data in products_data:
                 markings_data = product_data.pop('markings', [])
 
-                # Ищем существующий продукт или создаем новый
                 product, created = Product.objects.get_or_create(**product_data)
 
                 for marking_data in markings_data:
                     marking_value = marking_data.get('marking')
 
-                    # Проверяем, существует ли уже такая маркировка
                     if ProductMarking.objects.filter(marking=marking_value).exists():
                         raise ValidationError(f'Маркировка "{marking_value}" уже существует.')
 
-                    # Создаем новую маркировку
                     ProductMarking.objects.create(product=product, income=instance, **marking_data)
 
         return instance
@@ -112,8 +114,10 @@ class IncomeSerializer(serializers.ModelSerializer):
 
 class OutcomeSerializer(serializers.ModelSerializer):
     to_company = CompanySerializer()
-    product_markings = serializers.PrimaryKeyRelatedField(many=True, queryset=ProductMarking.objects.all(),
-                                                          write_only=True)
+    product_markings = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=ProductMarking.objects.all(), write_only=True
+    )
+    added_by = serializers.StringRelatedField(read_only=True)  # Display the user's name
 
     class Meta:
         model = Outcome
@@ -127,15 +131,20 @@ class OutcomeSerializer(serializers.ModelSerializer):
             'product_markings',
             'unit_of_measure',
             'total',
-            'is_archive'
+            'is_archive',
+            'added_by',
         )
 
+    @transaction.atomic
     def create(self, validated_data):
+        request = self.context.get('request')
+        user = request.user if request and request.user.is_authenticated else None
+
         company_data = validated_data.pop('to_company')
         product_markings_data = validated_data.pop('product_markings')
 
         company, created = Company.objects.get_or_create(**company_data)
-        outcome = Outcome.objects.create(to_company=company, **validated_data)
+        outcome = Outcome.objects.create(to_company=company, added_by=user, **validated_data)
 
         for marking in product_markings_data:
             marking.outcome = outcome
@@ -143,6 +152,7 @@ class OutcomeSerializer(serializers.ModelSerializer):
 
         return outcome
 
+    @transaction.atomic
     def update(self, instance, validated_data):
         company_data = validated_data.pop('to_company')
         product_markings_data = validated_data.pop('product_markings', None)
@@ -158,7 +168,7 @@ class OutcomeSerializer(serializers.ModelSerializer):
         instance.is_archive = validated_data.get('is_archive', instance.is_archive)
         instance.save()
 
-        if product_markings_data:
+        if product_markings_data is not None:
             instance.product_markings.clear()
             for marking in product_markings_data:
                 marking.outcome = instance

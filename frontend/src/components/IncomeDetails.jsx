@@ -1,20 +1,21 @@
-import React, {useState, useEffect} from 'react';
-import {Dialog, DialogHeader, DialogBody, DialogFooter, Button} from '@material-tailwind/react';
-import {getProducts} from '../api/api';
-import DocumentDialogIncome from './DocumentDialogIncome.jsx'; // Импорт компонента
+import React, { useState, useEffect } from 'react';
+import { Dialog, DialogHeader, DialogBody, DialogFooter, Button } from '@material-tailwind/react';
+import { getProducts } from '../api/api';
+import DocumentDialogIncome from './DocumentDialogIncome.jsx';
 
-const IncomeDetails = ({isOpen, onClose, income}) => {
+const IncomeDetails = ({ isOpen, onClose, income }) => {
     const [products, setProducts] = useState({});
-    const [showDocument, setShowDocument] = useState(false); // Состояние для отображения документа
+    const [showDocument, setShowDocument] = useState(false);
 
     useEffect(() => {
+        console.log('Income object:', income);
         const fetchProducts = async () => {
             try {
                 const response = await getProducts();
                 const productMap = response.data.reduce((map, product) => {
                     map[product.id] = {
                         name: product.name,
-                        price: product.price
+                        price: product.price,
                     };
                     return map;
                 }, {});
@@ -33,7 +34,7 @@ const IncomeDetails = ({isOpen, onClose, income}) => {
         const markingsText = markings.join('\n');
         navigator.clipboard.writeText(markingsText).then(() => {
             alert('Маркировки скопированы в буфер обмена!');
-        }).catch(error => {
+        }).catch((error) => {
             console.error('Failed to copy text: ', error);
         });
     };
@@ -52,17 +53,19 @@ const IncomeDetails = ({isOpen, onClose, income}) => {
             <DialogHeader className='flex justify-between'>
                 <p>Детали прихода</p>
                 <svg onClick={onClose} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                     strokeWidth={1.5} stroke="currentColor" className="size-6 cursor-pointer">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12"/>
+                    strokeWidth={1.5} stroke="currentColor" className="size-6 cursor-pointer">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
             </DialogHeader>
             <DialogBody className="flex-1 overflow-y-auto max-h-[calc(100vh-200px)]">
                 <div className="space-y-4">
+                    {/* Информация о компании и контактах */}
                     <div>
                         <p><strong>Компания:</strong> {income.from_company?.name}</p>
                         <p><strong>Телефон:</strong> {income.from_company?.phone}</p>
                         <p><strong>ИНН:</strong> {income.from_company?.inn}</p>
                     </div>
+                    {/* Информация о контракте и счете */}
                     <div>
                         <p><strong>Дата контракта:</strong> {income.contract_date}</p>
                         <p><strong>Номер контракта:</strong> {income.contract_number}</p>
@@ -71,10 +74,12 @@ const IncomeDetails = ({isOpen, onClose, income}) => {
                         <p><strong>Дата счета:</strong> {income.invoice_date}</p>
                         <p><strong>Номер счета:</strong> {income.invoice_number}</p>
                     </div>
+                    {/* Информация о единице измерения и общей сумме */}
                     <div>
                         <p><strong>Единица измерения:</strong> {income.unit_of_measure}</p>
                         <p><strong>Общая сумма:</strong> {income.total.toLocaleString()} сум</p>
                     </div>
+                    {/* Информация о продуктах и маркировках */}
                     <div>
                         <strong>Продукты и маркировки:</strong>
                         {Object.keys(groupedMarkings).length > 0 ? (
@@ -85,7 +90,7 @@ const IncomeDetails = ({isOpen, onClose, income}) => {
                                             <p><strong>Продукт:</strong> {productName}</p>
                                             <div className="flex flex-col items-end text-black">
                                                 {markings.map((marking, idx) => (
-                                                    <p key={idx}> {marking}</p>
+                                                    <p key={idx}>{marking}</p>
                                                 ))}
                                             </div>
                                         </div>
@@ -105,6 +110,10 @@ const IncomeDetails = ({isOpen, onClose, income}) => {
                             <p>Нет продуктов</p>
                         )}
                     </div>
+                    {/* Информация о пользователе, добавившем доход */}
+                    <div>
+                        <p><strong>Добавил(а) доход:</strong> {income.added_by ? income.added_by : 'Неизвестно'}</p>
+                    </div>
                 </div>
                 <Button
                     color="green"
@@ -119,8 +128,8 @@ const IncomeDetails = ({isOpen, onClose, income}) => {
                 <Button onClick={onClose}>Закрыть</Button>
             </DialogFooter>
 
-            {/* Использование отдельного компонента DocumentDialogIncomeIcome */}
-            <DocumentDialogIncome isOpen={showDocument} onClose={() => setShowDocument(false)} income={income}/>
+            {/* Использование отдельного компонента DocumentDialogIncome */}
+            <DocumentDialogIncome isOpen={showDocument} onClose={() => setShowDocument(false)} income={income} />
         </Dialog>
     );
 };

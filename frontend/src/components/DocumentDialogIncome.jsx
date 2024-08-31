@@ -42,7 +42,7 @@ const DocumentDialogIncome = ({isOpen, onClose, income}) => {
     if (!income) return null;
 
     return (
-        <Dialog open={isOpen} handler={onClose} size="xl" className="overflow-auto">
+        <Dialog open={isOpen} handler={onClose} size="xl" className="flex-1 overflow-y-auto max-h-[calc(100vh-200px)]">
             <DialogHeader className='flex justify-between'>
                 <p>Документ</p>
                 <svg onClick={onClose} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"

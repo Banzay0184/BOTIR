@@ -1,5 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import User
+
 
 
 class CustomUser(AbstractUser):
@@ -33,7 +35,7 @@ class ProductMarking(models.Model):
     marking = models.CharField(max_length=255, unique=True)
     income = models.ForeignKey("Income", on_delete=models.CASCADE, related_name="income", null=True,
                                blank=True)
-    outcome = models.ForeignKey("Outcome", on_delete=models.CASCADE, related_name="product_markings", null=True,
+    outcome = models.ForeignKey("Outcome", on_delete=models.PROTECT, related_name="product_markings", null=True,
                                 blank=True)
     product = models.ForeignKey("Product", on_delete=models.CASCADE, related_name="product", null=True,
                                 blank=True)
@@ -43,6 +45,7 @@ class ProductMarking(models.Model):
 
 
 class Income(models.Model):
+    added_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True)
     from_company = models.ForeignKey(Company, related_name="from_company", on_delete=models.CASCADE)
     contract_date = models.DateField()
     contract_number = models.CharField(max_length=255)
@@ -57,6 +60,7 @@ class Income(models.Model):
 
 
 class Outcome(models.Model):
+    added_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True)
     to_company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name="to_company")
     contract_date = models.DateField()
     contract_number = models.CharField(max_length=255)

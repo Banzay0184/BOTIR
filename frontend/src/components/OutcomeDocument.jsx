@@ -1,7 +1,7 @@
 import React, {useState, useEffect} from 'react';
-import {getOutcomes} from '../api/api';
+import {getOutcomes, deleteOutcome} from '../api/api'; // Убедитесь, что функция deleteOutcome правильно определена в вашем API файле
 import OutcomeDetails from './OutcomeDetails';
-import {Button, Input} from '@material-tailwind/react';
+import {Button, Input, Dialog, DialogHeader, DialogBody, DialogFooter} from '@material-tailwind/react';
 import EditOutcomeModal from './EditOutcomeModal';
 
 const OutcomeDocument = ({currentUser}) => {
@@ -10,6 +10,8 @@ const OutcomeDocument = ({currentUser}) => {
     const [selectedOutcome, setSelectedOutcome] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false); // Состояние для управления модальным окном подтверждения удаления
+    const [outcomeToDelete, setOutcomeToDelete] = useState(null); // Состояние для хранения удаляемого расхода
     const [searchTerm, setSearchTerm] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
@@ -19,7 +21,7 @@ const OutcomeDocument = ({currentUser}) => {
             try {
                 const response = await getOutcomes();
                 if (response.data && Array.isArray(response.data)) {
-                    const sortedData = response.data.reverse()
+                    const sortedData = response.data.reverse();
                     setOutcomes(sortedData);
                     setFilteredOutcomes(sortedData);
                 } else {
@@ -64,7 +66,6 @@ const OutcomeDocument = ({currentUser}) => {
     };
 
     const handleViewDetails = (outcome) => {
-        console.log('Selected outcome:', outcome);
         setSelectedOutcome(outcome);
         setIsModalOpen(true);
     };
@@ -85,7 +86,6 @@ const OutcomeDocument = ({currentUser}) => {
     };
 
     const handleUpdateOutcome = (updatedOutcome) => {
-        console.log(updatedOutcome)
         setOutcomes(prevOutcomes =>
             prevOutcomes.map(outcome =>
                 outcome.id === updatedOutcome?.id ? updatedOutcome : outcome
@@ -96,6 +96,22 @@ const OutcomeDocument = ({currentUser}) => {
                 outcome.id === updatedOutcome?.id ? updatedOutcome : outcome
             )
         );
+    };
+
+    const openConfirmDeleteModal = (outcomeId) => {
+        setOutcomeToDelete(outcomeId);
+        setIsConfirmDeleteOpen(true);
+    };
+
+    const handleDeleteOutcome = async () => {
+        try {
+            await deleteOutcome(outcomeToDelete); // Удаляем расход
+            setOutcomes(prevOutcomes => prevOutcomes.filter(outcome => outcome.id !== outcomeToDelete));
+            setFilteredOutcomes(prevOutcomes => prevOutcomes.filter(outcome => outcome.id !== outcomeToDelete));
+            setIsConfirmDeleteOpen(false); // Закрываем модальное окно
+        } catch (error) {
+            console.error('Ошибка при удалении расхода:', error);
+        }
     };
 
     return (
@@ -155,12 +171,46 @@ const OutcomeDocument = ({currentUser}) => {
                                     onClick={() => handleEditOutcome(outcome)}>
                                     Редактировать
                                 </Button>
+                                <Button
+                                    disabled={currentUser.position === 'Бухгалтер' || currentUser.position === 'Директор' || currentUser.position === 'Учредитель'}
+                                    size="sm"
+                                    color="red"
+                                    onClick={() => openConfirmDeleteModal(outcome.id)} // Открываем модальное окно подтверждения удаления
+                                >
+                                    Удалить
+                                </Button>
                             </td>
                         </tr>
                     ) : null
                 ))}
                 </tbody>
             </table>
+
+            {/* Модальное окно подтверждения удаления */}
+            <Dialog open={isConfirmDeleteOpen} handler={setIsConfirmDeleteOpen}>
+                <DialogHeader>Подтверждение удаления</DialogHeader>
+                <DialogBody divider>
+                    Вы уверены, что хотите удалить этот расход? Маркировки останутся.
+                </DialogBody>
+                <DialogFooter>
+                    <Button
+                        variant="text"
+                        color="red"
+                        onClick={handleDeleteOutcome}
+                        className="mr-1"
+                    >
+                        Да, удалить
+                    </Button>
+                    <Button
+                        variant="text"
+                        color="blue"
+                        onClick={() => setIsConfirmDeleteOpen(false)}
+                    >
+                        Отмена
+                    </Button>
+                </DialogFooter>
+            </Dialog>
+
             {selectedOutcome && (
                 <OutcomeDetails
                     isOpen={isModalOpen}

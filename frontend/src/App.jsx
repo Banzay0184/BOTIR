@@ -1,7 +1,7 @@
 import React, {useState, useEffect} from "react";
 import {Route, Routes, Navigate, useNavigate} from "react-router-dom";
 import NotFoundPage from "./pages/NotFoundPage.jsx";
-import HomePage from "./pages/HomePage.jsx";
+import DashboardPage from "./pages/DashboardPage.jsx";
 import Layout from "./components/Layout.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import DocumentPage from "./pages/DocumentPage.jsx";
@@ -39,7 +39,7 @@ function App() {
         <Routes>
             {currentUser ? (
                 <Route path="/" element={<Layout currentUser={currentUser} onLogout={handleLogout}/>}>
-                    <Route path="/home" element={<HomePage/>} index/>
+                    <Route path="/home" element={<DashboardPage/>} index/>
                     <Route path="/documents" element={<DocumentPage/>}/>
                     <Route path="/income" element={<IncomeList currentUser={currentUser}/>}/>
                     <Route path="/outcome" element={<OutcomeList/>}/>

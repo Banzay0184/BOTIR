@@ -105,6 +105,9 @@ const OutcomeDetails = ({isOpen, onClose, outcome}) => {
                             <p>Нет продуктов</p>
                         )}
                     </div>
+                    <div>
+                        <p><strong>Добавил(а) доход:</strong> {outcome.added_by ? outcome.added_by : 'Неизвестно'}</p>
+                    </div>
                 </div>
                 <Button
                     color="green"

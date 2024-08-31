@@ -9,7 +9,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework.decorators import api_view
 from .serializers import CustomUserSerializer
 from django.contrib.auth import get_user_model
-
+from rest_framework.permissions import IsAuthenticated
 from warehouse.models import Company, Product, ProductMarking, Income, Outcome, CustomUser
 from .serializers import CompanySerializer, ProductSerializer, ProductMarkingSerializer, IncomeSerializer, \
     OutcomeSerializer
@@ -33,6 +33,7 @@ class ProductMarkingViewSet(viewsets.ModelViewSet):
 
 
 class IncomeViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
     queryset = Income.objects.all()
     serializer_class = IncomeSerializer
 
@@ -40,6 +41,16 @@ class IncomeViewSet(viewsets.ModelViewSet):
 class OutcomeViewSet(viewsets.ModelViewSet):
     queryset = Outcome.objects.all()
     serializer_class = OutcomeSerializer
+
+    def destroy(self, request, *args, **kwargs):
+        outcome = self.get_object()
+
+        # Check for related ProductMarkings and set their foreign key to None if needed
+        ProductMarking.objects.filter(outcome=outcome).update(outcome=None)
+
+        # Now you can safely delete the outcome
+        outcome.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class UpdateMarkingView(APIView):
@@ -54,6 +65,15 @@ class UpdateMarkingView(APIView):
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, income_id, product_id, marking_id, format=None):
+        try:
+            # Извлечение объектов по их ID
+            marking = ProductMarking.objects.get(id=marking_id, product_id=product_id, income_id=income_id)
+            marking.delete()  # Удаление маркировки
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except ProductMarking.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
 
 
 class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -123,14 +143,3 @@ def logout_view(request):
 def check_marking_exists(request, marking):
     exists = ProductMarking.objects.filter(marking=marking).exists()
     return Response({'exists': exists})
-
-
-class DeleteMarkingView(APIView):
-    def delete(self, request, income_id, product_id, marking_id, format=None):
-        try:
-            # Извлечение объектов по их ID
-            marking = ProductMarking.objects.get(id=marking_id, product_id=product_id, income_id=income_id)
-            marking.delete()  # Удаление маркировки
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        except ProductMarking.DoesNotExist:
-            return Response(status=status.HTTP_404_NOT_FOUND)
