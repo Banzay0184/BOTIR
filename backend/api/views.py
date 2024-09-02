@@ -34,7 +34,7 @@ class ProductMarkingViewSet(viewsets.ModelViewSet):
 
 class IncomeViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
-    queryset = Income.objects.all()
+    queryset = Income.objects.prefetch_related("income").select_related('from_company', 'added_by').all()
     serializer_class = IncomeSerializer
 
 

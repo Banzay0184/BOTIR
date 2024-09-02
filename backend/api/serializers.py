@@ -34,12 +34,18 @@ class ProductMarkingSerializer(serializers.ModelSerializer):
 class IncomeSerializer(serializers.ModelSerializer):
     added_by = serializers.StringRelatedField()
     from_company = CompanySerializer()
-    products = serializers.ListField(child=serializers.DictField(), write_only=True)
-    product_markings = serializers.SerializerMethodField()
+    # products = serializers.ListField(child=serializers.DictField(), write_only=True)
+    # product_markings = serializers.SerializerMethodField()
 
     class Meta:
         model = Income
         fields = '__all__'
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        print()
+        representation['product_markings'] = ProductMarkingSerializer(instance.income, many=True).data
+        return representation
 
     def get_product_markings(self, obj):
         product_markings = ProductMarking.objects.filter(income=obj)
