@@ -37,6 +37,44 @@ class IncomeViewSet(viewsets.ModelViewSet):
     queryset = Income.objects.prefetch_related("income").select_related('from_company', 'added_by').all()
     serializer_class = IncomeSerializer
 
+    def destroy(self, request, *args, **kwargs):
+        income = self.get_object()
+
+        # Найти все связанные маркировки (ProductMarking), связанные с этим доходом
+        related_markings = ProductMarking.objects.filter(income=income)
+
+        # Удаляем все связанные Outcome для каждой маркировки
+        outcomes_to_delete = set()  # Используем множество, чтобы избежать дублирования Outcome
+
+        for marking in related_markings:
+            if marking.outcome:  # Проверяем, есть ли связанный Outcome
+                outcomes_to_delete.add(marking.outcome)  # Добавляем Outcome в множество
+
+        # Теперь удаляем все Outcome, которые мы собрали
+        for outcome in outcomes_to_delete:
+            try:
+                self.perform_destroy_outcome(outcome)  # Удаляем Outcome через функцию
+            except Outcome.DoesNotExist:
+                # Если Outcome не существует, игнорируем ошибку
+                pass
+
+        # Теперь можем удалить все маркировки, связанные с этим доходом
+        related_markings.delete()
+
+        # Удаляем сам доход
+        income.delete()
+
+        return Response({"message": "Income and related outcomes successfully deleted."},
+                        status=status.HTTP_204_NO_CONTENT)
+
+    def perform_destroy_outcome(self, outcome):
+        """
+        Вспомогательная функция для удаления Outcome
+        """
+        # Удаляем связанные маркировки продуктов, если нужно
+        ProductMarking.objects.filter(outcome=outcome).update(outcome=None)
+        outcome.delete()
+
 
 class OutcomeViewSet(viewsets.ModelViewSet):
     queryset = Outcome.objects.all()

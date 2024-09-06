@@ -15,10 +15,12 @@ const OutcomeDocument = ({currentUser}) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+    const [isLoading, setIsLoading] = useState(true); // Добавляем состояние загрузки
 
     useEffect(() => {
         const fetchOutcomes = async () => {
             try {
+                setIsLoading(true); // Устанавливаем состояние загрузки
                 const response = await getOutcomes();
                 if (response.data && Array.isArray(response.data)) {
                     const sortedData = response.data.reverse();
@@ -29,6 +31,8 @@ const OutcomeDocument = ({currentUser}) => {
                 }
             } catch (error) {
                 console.error('Error fetching outcomes:', error);
+            } finally {
+                setIsLoading(false); // Завершаем состояние загрузки
             }
         };
 
@@ -138,53 +142,60 @@ const OutcomeDocument = ({currentUser}) => {
                     onChange={(e) => setEndDate(e.target.value)}
                 />
             </div>
-            <table className="min-w-full bg-white border">
-                <thead>
-                <tr>
-                    <th className="py-2 px-4 border">Компания</th>
-                    <th className="py-2 px-4 border">Дата контракта</th>
-                    <th className="py-2 px-4 border">Номер контракта</th>
-                    <th className="py-2 px-4 border">Дата счета</th>
-                    <th className="py-2 px-4 border">Номер счета</th>
-                    <th className="py-2 px-4 border">Общая сумма</th>
-                    <th className="py-2 px-4 border">Действия</th>
-                </tr>
-                </thead>
-                <tbody>
-                {filteredOutcomes.map((outcome) => (
-                    outcome && outcome.id ? (
-                        <tr key={outcome.id} className="border-b">
-                            <td className="py-2 px-4 border">{outcome.to_company?.name}</td>
-                            <td className="py-2 px-4 border">{outcome.contract_date}</td>
-                            <td className="py-2 px-4 border">{outcome.contract_number}</td>
-                            <td className="py-2 px-4 border">{outcome.invoice_date}</td>
-                            <td className="py-2 px-4 border">{outcome.invoice_number}</td>
-                            <td className="py-2 px-4 border">{outcome.total.toLocaleString()} сум.</td>
-                            <td className="py-2 px-4 border flex flex-col gap-2">
-                                <Button size="sm" color="blue" onClick={() => handleViewDetails(outcome)}>
-                                    Просмотр
-                                </Button>
-                                <Button
-                                    disabled={currentUser.position === 'Бухгалтер' || currentUser.position === 'Директор' || currentUser.position === 'Учредитель'}
-                                    size="sm"
-                                    color="green"
-                                    onClick={() => handleEditOutcome(outcome)}>
-                                    Редактировать
-                                </Button>
-                                <Button
-                                    disabled={currentUser.position === 'Бухгалтер' || currentUser.position === 'Директор' || currentUser.position === 'Учредитель'}
-                                    size="sm"
-                                    color="red"
-                                    onClick={() => openConfirmDeleteModal(outcome.id)} // Открываем модальное окно подтверждения удаления
-                                >
-                                    Удалить
-                                </Button>
-                            </td>
-                        </tr>
-                    ) : null
-                ))}
-                </tbody>
-            </table>
+
+            {isLoading ? (  // Отображаем анимацию загрузки, если данные загружаются
+                <div className="flex justify-center items-center h-96">
+                    <div className="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mb-4"></div>
+                </div>
+            ) : (  // Отображаем данные, если загрузка завершена
+                <table className="min-w-full bg-white border">
+                    <thead>
+                    <tr>
+                        <th className="py-2 px-4 border">Компания</th>
+                        <th className="py-2 px-4 border">Дата контракта</th>
+                        <th className="py-2 px-4 border">Номер контракта</th>
+                        <th className="py-2 px-4 border">Дата счета</th>
+                        <th className="py-2 px-4 border">Номер счета</th>
+                        <th className="py-2 px-4 border">Общая сумма</th>
+                        <th className="py-2 px-4 border">Действия</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {filteredOutcomes.map((outcome) => (
+                        outcome && outcome.id ? (
+                            <tr key={outcome.id} className="border-b">
+                                <td className="py-2 px-4 border">{outcome.to_company?.name}</td>
+                                <td className="py-2 px-4 border">{outcome.contract_date}</td>
+                                <td className="py-2 px-4 border">{outcome.contract_number}</td>
+                                <td className="py-2 px-4 border">{outcome.invoice_date}</td>
+                                <td className="py-2 px-4 border">{outcome.invoice_number}</td>
+                                <td className="py-2 px-4 border">{outcome.total.toLocaleString()} сум.</td>
+                                <td className="py-2 px-4 border flex flex-col gap-2">
+                                    <Button size="sm" color="blue" onClick={() => handleViewDetails(outcome)}>
+                                        Просмотр
+                                    </Button>
+                                    <Button
+                                        disabled={currentUser.position === 'Бухгалтер' || currentUser.position === 'Директор' || currentUser.position === 'Учредитель'}
+                                        size="sm"
+                                        color="green"
+                                        onClick={() => handleEditOutcome(outcome)}>
+                                        Редактировать
+                                    </Button>
+                                    <Button
+                                        disabled={currentUser.position === 'Бухгалтер' || currentUser.position === 'Директор' || currentUser.position === 'Учредитель'}
+                                        size="sm"
+                                        color="red"
+                                        onClick={() => openConfirmDeleteModal(outcome.id)} // Открываем модальное окно подтверждения удаления
+                                    >
+                                        Удалить
+                                    </Button>
+                                </td>
+                            </tr>
+                        ) : null
+                    ))}
+                    </tbody>
+                </table>
+            )}
 
             {/* Модальное окно подтверждения удаления */}
             <Dialog open={isConfirmDeleteOpen} handler={setIsConfirmDeleteOpen}>

@@ -1,5 +1,5 @@
 import React, {useState, useEffect} from 'react';
-import {getIncomes} from '../api/api';
+import {getIncomes, deleteIncome} from '../api/api';
 import IncomeDetails from './IncomeDetails';
 import {Button, Input} from '@material-tailwind/react';
 import EditIncomeModal from './EditIncomeModal';
@@ -13,13 +13,15 @@ const IncomeDocument = ({currentUser}) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+    const [isLoading, setIsLoading] = useState(true); // Добавляем состояние загрузки
 
     useEffect(() => {
         const fetchIncomes = async () => {
             try {
+                setIsLoading(true); // Устанавливаем состояние загрузки
                 const response = await getIncomes();
                 if (response.data && Array.isArray(response.data)) {
-                    const sortedData = response.data.reverse()
+                    const sortedData = response.data.reverse();
                     setIncomes(sortedData);
                     setFilteredIncomes(sortedData);
                 } else {
@@ -27,6 +29,8 @@ const IncomeDocument = ({currentUser}) => {
                 }
             } catch (error) {
                 console.error('Error fetching incomes:', error);
+            } finally {
+                setIsLoading(false); // Завершаем состояние загрузки
             }
         };
 
@@ -95,6 +99,16 @@ const IncomeDocument = ({currentUser}) => {
         console.log("Последний добавленный income:", updatedIncome);
     };
 
+    const handleDeleteIncome = async (incomeId) => {
+        try {
+            await deleteIncome(incomeId);
+            setIncomes(incomes.filter(income => income.id !== incomeId));
+            setFilteredIncomes(filteredIncomes.filter(income => income.id !== incomeId));
+        } catch (error) {
+            console.error('Ошибка при удалении дохода:', error);
+        }
+    };
+
     return (
         <div className="p-4 h-[100vh] w-full overflow-scroll">
             <h2 className="text-xl font-bold mb-4">Список приходов</h2>
@@ -119,45 +133,59 @@ const IncomeDocument = ({currentUser}) => {
                     onChange={(e) => setEndDate(e.target.value)}
                 />
             </div>
-            <table className="min-w-full bg-white border">
-                <thead>
-                <tr>
-                    <th className="py-2 px-4 border">Компания</th>
-                    <th className="py-2 px-4 border">Дата контракта</th>
-                    <th className="py-2 px-4 border">Номер контракта</th>
-                    <th className="py-2 px-4 border">Дата счета</th>
-                    <th className="py-2 px-4 border">Номер счета</th>
-                    <th className="py-2 px-4 border">Общая сумма</th>
-                    <th className="py-2 px-4 border">Действия</th>
-                </tr>
-                </thead>
-                <tbody>
-                {filteredIncomes.map((income) => (
-                    income && income.id ? (
-                        <tr key={income.id} className="border-b">
-                            <td className="py-2 px-4 border">{income.from_company?.name}</td>
-                            <td className="py-2 px-4 border">{income.contract_date}</td>
-                            <td className="py-2 px-4 border">{income.contract_number}</td>
-                            <td className="py-2 px-4 border">{income.invoice_date}</td>
-                            <td className="py-2 px-4 border">{income.invoice_number}</td>
-                            <td className="py-2 px-4 border">{income.total.toLocaleString()} сум.</td>
-                            <td className="py-2 px-4 border flex flex-col gap-2">
-                                <Button size="sm" color="blue" onClick={() => handleViewDetails(income)}>
-                                    Просмотр
-                                </Button>
-                                <Button
-                                    disabled={currentUser.position === 'Бухгалтер' || currentUser.position === 'Директор' || currentUser.position === 'Учредитель'}
-                                    size="sm"
-                                    color="green"
-                                    onClick={() => handleEditIncome(income)}>
-                                    Редактировать
-                                </Button>
-                            </td>
-                        </tr>
-                    ) : null
-                ))}
-                </tbody>
-            </table>
+
+            {isLoading ? ( // Отображение индикатора загрузки, если данные загружаются
+                <div className="flex justify-center items-center h-96">
+                    <div className="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mb-4"></div>
+                </div>
+            ) : ( // Отображение данных, когда загрузка завершена
+                <table className="min-w-full bg-white border">
+                    <thead>
+                    <tr>
+                        <th className="py-2 px-4 border">Компания</th>
+                        <th className="py-2 px-4 border">Дата контракта</th>
+                        <th className="py-2 px-4 border">Номер контракта</th>
+                        <th className="py-2 px-4 border">Дата счета</th>
+                        <th className="py-2 px-4 border">Номер счета</th>
+                        <th className="py-2 px-4 border">Общая сумма</th>
+                        <th className="py-2 px-4 border">Действия</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {filteredIncomes.map((income) => (
+                        income && income.id ? (
+                            <tr key={income.id} className="border-b">
+                                <td className="py-2 px-4 border">{income.from_company?.name}</td>
+                                <td className="py-2 px-4 border">{income.contract_date}</td>
+                                <td className="py-2 px-4 border">{income.contract_number}</td>
+                                <td className="py-2 px-4 border">{income.invoice_date}</td>
+                                <td className="py-2 px-4 border">{income.invoice_number}</td>
+                                <td className="py-2 px-4 border">{income.total.toLocaleString()} сум.</td>
+                                <td className="py-2 px-4 border flex flex-col gap-2">
+                                    <Button size="sm" color="blue" onClick={() => handleViewDetails(income)}>
+                                        Просмотр
+                                    </Button>
+                                    <Button
+                                        disabled={currentUser.position === 'Бухгалтер' || currentUser.position === 'Директор' || currentUser.position === 'Учредитель'}
+                                        size="sm"
+                                        color="green"
+                                        onClick={() => handleEditIncome(income)}>
+                                        Редактировать
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        color="red"
+                                        onClick={() => handleDeleteIncome(income.id)}>
+                                        Удалить
+                                    </Button>
+                                </td>
+                            </tr>
+                        ) : null
+                    ))}
+                    </tbody>
+                </table>
+            )}
+
             {selectedIncome && (
                 <IncomeDetails
                     isOpen={isModalOpen}

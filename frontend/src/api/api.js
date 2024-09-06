@@ -134,6 +134,18 @@ export const deleteOutcome = async (outcomeId) => {
     }
 };
 
+
+export const deleteIncome = async (incomeId) => {
+    try {
+        const response = await axiosInstance.delete(`/incomes/${incomeId}/`);
+        return response.data;
+    } catch (error) {
+        console.error('Error deleting income:', error.response?.data || error.message);
+        throw error;
+    }
+};
+
+
 class AuthService {
     login(username, password) {
         return axios.post(API_URL + '/token/', {username, password})

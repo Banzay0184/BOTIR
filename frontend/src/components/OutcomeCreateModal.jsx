@@ -25,6 +25,7 @@ const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarki
     const [error, setError] = useState('');
     const [products, setProducts] = useState({});
     const [manualTotal, setManualTotal] = useState(false);
+    const [isSaving, setIsSaving] = useState(false); // Состояние для отслеживания процесса сохранения
 
     useEffect(() => {
         if (isOpen) {
@@ -124,6 +125,7 @@ const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarki
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setIsSaving(true); // Начало процесса сохранения
 
         const outcomeData = {
             ...formData,
@@ -134,6 +136,7 @@ const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarki
 
         if (outcomeData.product_markings.length === 0) {
             setError('Не выбрана ни одна маркировка.');
+            setIsSaving(false);
             return;
         }
 
@@ -141,7 +144,6 @@ const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarki
             const response = await createOutcome(outcomeData);
             console.log('Outcome created successfully:', response.data);
 
-            // Удаляем выбранные markings из списка доходов
             setIncomes((prevIncomes) =>
                 prevIncomes.map((income) => ({
                     ...income,
@@ -156,9 +158,10 @@ const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarki
         } catch (error) {
             console.error('Error creating outcome:', error.response?.data || error.message);
             setError('Произошла ошибка при добавлении расхода.');
+        } finally {
+            setIsSaving(false); // Окончание процесса сохранения
         }
     };
-
 
     const handleOpenAddCompanyModal = (e) => {
         e.stopPropagation();
@@ -213,6 +216,7 @@ const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarki
                                 onClick={handleOpenAddCompanyModal}
                                 color="blue"
                                 className="ml-2"
+                                disabled={isSaving} // Блокировка кнопки при сохранении
                             >
                                 Добавить
                             </Button>
@@ -303,18 +307,45 @@ const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarki
                                 name="total"
                                 value={formData.total}
                                 onChange={handleTotalChange}
+                                disabled={isSaving} // Блокировка поля при сохранении
                             />
                         </div>
                     </form>
                     {error && <div className="text-red-500 mt-2 text-center">{error}</div>}
                 </DialogBody>
-                <DialogFooter>
+                <DialogFooter className=' flex justify-end space-x-2'>
                     <Button
                         form="outcome-form"
                         type="submit"
                         color="green"
+                        disabled={isSaving} // Блокировка кнопки при сохранении
                     >
-                        Сохранить
+                        {isSaving ? (
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                                className="w-5 h-5 animate-spin"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="2"
+                                    d="M4 4v6h6m-6 0v6h6M12 6v6h6m-6 0v6h6"
+                                />
+                            </svg>
+                        ) : (
+                            'Сохранить'
+                        )}
+                    </Button>
+                    <Button
+                        type="button"
+                        color="red"
+                        onClick={onClose}
+                        disabled={isSaving} // Блокировка кнопки при сохранении
+                    >
+                        Отмена
                     </Button>
                 </DialogFooter>
             </Dialog>

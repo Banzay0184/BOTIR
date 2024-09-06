@@ -34,8 +34,8 @@ class ProductMarkingSerializer(serializers.ModelSerializer):
 class IncomeSerializer(serializers.ModelSerializer):
     added_by = serializers.StringRelatedField()
     from_company = CompanySerializer()
-    # products = serializers.ListField(child=serializers.DictField(), write_only=True)
-    # product_markings = serializers.SerializerMethodField()
+    products = serializers.ListField(child=serializers.DictField(), write_only=True)
+    product_markings = serializers.SerializerMethodField()
 
     class Meta:
         model = Income
@@ -53,6 +53,7 @@ class IncomeSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
+        print(validated_data)
         company_data = validated_data.pop('from_company')
         products_data = validated_data.pop('products')
         user = self.context['request'].user  # Получаем текущего пользователя

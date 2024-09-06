@@ -41,6 +41,7 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
     const [markingErrors, setMarkingErrors] = useState({});
     const [validationErrors, setValidationErrors] = useState({});
     const [fileInputKey, setFileInputKey] = useState(Date.now());
+    const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
         if (isOpen) {
@@ -369,6 +370,8 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
             return; // Прекращение выполнения, если есть ошибки
         }
 
+        setIsSaving(true); // Устанавливаем состояние загрузки
+
         try {
             const response = await createIncome(dataToSubmit);
             console.log('Income created successfully:', response.data);
@@ -386,6 +389,8 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
                 setError('Произошла ошибка при добавлении дохода.');
             }
             console.error('Error adding income:', error.response?.data || error.message);
+        } finally {
+            setIsSaving(false); // Останавливаем загрузку
         }
     };
 
@@ -622,12 +627,36 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
                     {error && <div className="text-red-500 mt-2 text-center">{error}</div>}
                 </DialogBody>
                 <DialogFooter className='flex justify-end space-x-4'>
-                    <Button
+                        <Button
                         form="income-form"
                         type="submit"
                         color="green"
+                        disabled={isSaving} // Блокируем кнопку при сохранении
                     >
-                        Сохранить
+                        {isSaving ? (
+                            <svg
+                                className="animate-spin h-5 w-5 mr-3 text-white"
+                                xmlns="http://www.w3.org/2000/svg"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                            >
+                                <circle
+                                    className="opacity-25"
+                                    cx="12"
+                                    cy="12"
+                                    r="10"
+                                    stroke="currentColor"
+                                    strokeWidth="4"
+                                />
+                                <path
+                                    className="opacity-75"
+                                    fill="currentColor"
+                                    d="M4 12a8 8 0 018-8v8z"
+                                />
+                            </svg>
+                        ) : (
+                            'Сохранить'
+                        )}
                     </Button>
                     <Button
                         type="button"
