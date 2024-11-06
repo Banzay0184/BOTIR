@@ -3,7 +3,6 @@ from django.contrib.auth.models import AbstractUser
 from django.contrib.auth.models import User
 
 
-
 class CustomUser(AbstractUser):
     position = models.CharField(max_length=100, blank=True, null=True)
     phone = models.CharField(max_length=20, blank=True, null=True)
@@ -33,6 +32,7 @@ class Product(models.Model):
 
 class ProductMarking(models.Model):
     marking = models.CharField(max_length=255, unique=True)
+    counter = models.BooleanField(default=False)
     income = models.ForeignKey("Income", on_delete=models.CASCADE, related_name="income", null=True,
                                blank=True)
     outcome = models.ForeignKey("Outcome", on_delete=models.PROTECT, related_name="product_markings", null=True,

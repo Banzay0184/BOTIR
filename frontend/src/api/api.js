@@ -73,11 +73,11 @@ export const createProductMarking = (data) => axiosInstance.post('/product-marki
 export const getIncomes = () => axiosInstance.get('/incomes/');
 export const createIncome = (data) => axiosInstance.post('/incomes/', data);
 
-export const updateMarking = async (incomeId, productId, markingId, newMarking) => {
+export const updateMarking = async (incomeId, productId, markingId, newMarking, newMarkingCounter) => {
     try {
         const response = await axiosInstance.put(
             `/incomes/${incomeId}/products/${productId}/markings/${markingId}/`,
-            {marking: newMarking}
+            {marking: newMarking, counter: newMarkingCounter}
         );
         return response.data;
     } catch (error) {
