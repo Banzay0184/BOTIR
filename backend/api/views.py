@@ -110,10 +110,13 @@ class ProductMarkingViewSet(viewsets.ModelViewSet):
 
 class IncomeViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsOperatorOrAdminOrReadOnly]
-    queryset = Income.objects.prefetch_related("income").select_related('from_company', 'added_by').all()
     serializer_class = IncomeSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = IncomeFilter
+
+    def get_queryset(self):
+        """Все приходы видны всем авторизованным пользователям (без фильтра по added_by)."""
+        return Income.objects.prefetch_related("income").select_related('from_company', 'added_by').all()
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -190,11 +193,14 @@ class IncomeViewSet(viewsets.ModelViewSet):
 
 
 class OutcomeViewSet(viewsets.ModelViewSet):
-    queryset = Outcome.objects.all()
     serializer_class = OutcomeSerializer
     permission_classes = [IsAuthenticated, IsOperatorOrAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend]
     filterset_class = OutcomeFilter
+
+    def get_queryset(self):
+        """Все расходы видны всем авторизованным пользователям (без фильтра по added_by)."""
+        return Outcome.objects.select_related('to_company', 'added_by').prefetch_related('product_markings').all()
 
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
