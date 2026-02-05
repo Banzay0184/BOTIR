@@ -6,12 +6,18 @@ DEBUG = False
 if "banzay.pythonanywhere.com" not in ALLOWED_HOSTS:
     ALLOWED_HOSTS = list(ALLOWED_HOSTS) + ["banzay.pythonanywhere.com"]
 
-# CORS: без указания origin браузер блокирует ответ (в т.ч. token/). Задай в .env:
-#   CORS_ALLOWED_ORIGINS=https://твой-фронт.vercel.app,http://localhost:5173
-#   CORS_ALLOW_CREDENTIALS=1
+# CORS: если env CORS_ALLOWED_ORIGINS не задан на PythonAnywhere — используем захардкоженный список.
+# Иначе браузер не получит Access-Control-Allow-Origin и будет CORS error.
+# Переопределить можно через env: CORS_ALLOWED_ORIGINS=https://другой.домен
+_default_cors_origins = [
+    "https://www.scclms.uz",
+    "https://scclms.uz",
+]
 if not CORS_ALLOWED_ORIGINS:
-    CORS_ALLOWED_ORIGINS = ["https://banzay.pythonanywhere.com"]
+    CORS_ALLOWED_ORIGINS = _default_cors_origins
 CORS_ALLOW_CREDENTIALS = True
+# Authorization для Bearer token (django-cors-headers по умолчанию уже разрешает, на всякий случай явно)
+CORS_ALLOW_HEADERS = ["accept", "accept-encoding", "authorization", "content-type", "origin", "x-requested-with"]
 
 # если проект за прокси (nginx / pythonanywhere / etc)
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
