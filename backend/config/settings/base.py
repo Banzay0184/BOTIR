@@ -20,10 +20,12 @@ ALLOWED_HOSTS = [
     if h.strip()
 ]
 
-# CORS: укажи точный origin фронта (например https://твой-фронт.vercel.app или http://localhost:5173)
-# Допускается переменная CORS_ALLOW_ORIGINS (опечатка) или CORS_ALLOWED_ORIGINS
+# CORS: из env + всегда добавляем прод-домены (чтобы работало и в dev, и на PythonAnywhere)
 _cors_origins = os.getenv("CORS_ALLOWED_ORIGINS") or os.getenv("CORS_ALLOW_ORIGINS") or ""
 CORS_ALLOWED_ORIGINS = [o.strip() for o in _cors_origins.split(",") if o.strip()]
+for _origin in ("https://www.scclms.uz", "https://scclms.uz"):
+    if _origin not in CORS_ALLOWED_ORIGINS:
+        CORS_ALLOWED_ORIGINS.append(_origin)
 CORS_ALLOW_CREDENTIALS = os.getenv("CORS_ALLOW_CREDENTIALS", "0") == "1"
 
 INSTALLED_APPS = [
