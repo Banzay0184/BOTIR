@@ -13,6 +13,7 @@ import ArchivePage from "./pages/ArchivePage.jsx";
 import IncomeDocumentViewPage from "./pages/IncomeDocumentViewPage.jsx";
 import OutcomeDocumentViewPage from "./pages/OutcomeDocumentViewPage.jsx";
 import UsersPage from "./pages/UsersPage.jsx";
+import ProductsPage from "./pages/ProductsPage.jsx";
 import AuthService from './api/api.js';
 
 function App() {

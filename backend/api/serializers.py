@@ -86,6 +86,17 @@ class ProductSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class ProductSelectSerializer(serializers.ModelSerializer):
+    """
+    Лёгкий сериалайзер для выпадающих списков на фронте.
+    Не включает вычисляемые поля (например stock), чтобы не грузить БД.
+    """
+
+    class Meta:
+        model = Product
+        fields = ('id', 'name', 'kpi', 'price')
+
+
 class ProductMarkingSerializer(serializers.ModelSerializer):
     product_name = serializers.SerializerMethodField()
     product_kpi = serializers.SerializerMethodField()

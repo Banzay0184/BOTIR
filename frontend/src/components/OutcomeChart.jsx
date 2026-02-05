@@ -1,6 +1,6 @@
 import React, {useState, useEffect} from 'react';
 import Chart from "react-apexcharts";
-import { getOutcomes, getProductsAllPages } from '../api/api';
+import { getOutcomes, getAllProductsCached } from '../api/api';
 
 const OutcomeChart = () => {
     const [chartData, setChartData] = useState({
@@ -12,7 +12,7 @@ const OutcomeChart = () => {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [outcomesResponse, productsList] = await Promise.all([getOutcomes(), getProductsAllPages()]);
+                const [outcomesResponse, productsList] = await Promise.all([getOutcomes(), getAllProductsCached()]);
                 const outcomes = outcomesResponse.data?.results ?? outcomesResponse.data;
                 const products = Array.isArray(productsList) ? productsList : [];
 

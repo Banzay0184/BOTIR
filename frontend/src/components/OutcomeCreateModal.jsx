@@ -1,7 +1,7 @@
 import React, {useState, useEffect} from 'react';
 import Select from 'react-select';
 import {Dialog, DialogHeader, DialogBody, DialogFooter, Button, Input} from '@material-tailwind/react';
-import { createOutcome, getCompanies, getProductsAllPages, getApiErrorMessage } from '../api/api';
+import { createOutcome, getCompanies, getApiErrorMessage } from '../api/api';
 import AddCompanyModal from './AddCompanyModal';
 
 const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarkings, setIncomes}) => {
@@ -23,7 +23,6 @@ const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarki
     const [companyOptions, setCompanyOptions] = useState([]);
     const [isAddCompanyModalOpen, setIsAddCompanyModalOpen] = useState(false);
     const [error, setError] = useState('');
-    const [products, setProducts] = useState({});
     const [manualTotal, setManualTotal] = useState(false);
     const [isSaving, setIsSaving] = useState(false); // Состояние для отслеживания процесса сохранения
 
@@ -47,24 +46,6 @@ const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarki
             fetchCompanies();
         }
     }, [isOpen]);
-
-    useEffect(() => {
-        const fetchProducts = async () => {
-            try {
-                const list = await getProductsAllPages();
-                const arr = Array.isArray(list) ? list : [];
-                const productMap = arr.reduce((map, product) => {
-                    map[product.id] = product;
-                    return map;
-                }, {});
-                setProducts(productMap);
-            } catch (error) {
-                console.error('Failed to fetch products:', error);
-            }
-        };
-
-        fetchProducts();
-    }, []);
 
     useEffect(() => {
         if (!manualTotal) {
@@ -106,8 +87,8 @@ const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarki
 
     const calculateTotal = () => {
         const total = selectedMarkings.reduce((sum, marking) => {
-            const product = products[marking.product];
-            return sum + (product ? product.price : 0);
+            const price = Number(marking.product_price ?? marking.productPrice ?? 0);
+            return sum + (Number.isFinite(price) ? price : 0);
         }, 0);
         setFormData((prevData) => ({
             ...prevData,

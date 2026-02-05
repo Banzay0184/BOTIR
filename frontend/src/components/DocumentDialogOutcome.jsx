@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Button } from '@material-tailwind/react';
 import SimpleDialog from './SimpleDialog';
-import { getProductsAllPages } from '../api/api.js';
+import { getAllProductsCached } from '../api/api.js';
 
 const DocumentDialogOutcome = ({ isOpen, onClose, outcome }) => {
     const [productDetails, setProductDetails] = useState([]);
@@ -9,7 +9,7 @@ const DocumentDialogOutcome = ({ isOpen, onClose, outcome }) => {
     useEffect(() => {
         const fetchProductDetails = async () => {
             try {
-                const productsList = await getProductsAllPages();
+                const productsList = await getAllProductsCached();
                 const list = Array.isArray(productsList) ? productsList : [];
 
                 const details = outcome.product_markings.reduce((acc, marking) => {

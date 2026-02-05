@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Typography } from '@material-tailwind/react';
-import { getProductsAllPages } from '../api/api';
+import { getAllProductsCached } from '../api/api';
 
 const OutcomeItemList = ({
                              searchTerm,
@@ -16,7 +16,7 @@ const OutcomeItemList = ({
     useEffect(() => {
         const fetchProducts = async () => {
             try {
-                const list = await getProductsAllPages();
+                const list = await getAllProductsCached();
                 const productMap = (Array.isArray(list) ? list : []).reduce((map, product) => {
                     map[product.id] = { name: product.name, kpi: product.kpi };
                     return map;

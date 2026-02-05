@@ -111,6 +111,13 @@ export const getProducts = (signal, params = {}) =>
 export const getProductsPaginated = (params = {}, signal) =>
     axiosInstance.get('/products/', { params, ...(signal ? { signal } : {}) });
 
+/**
+ * Быстрый список товаров для селектов (без тяжёлых вычислений на бэке).
+ * params: { q, page }
+ */
+export const getProductsSelect = (params = {}, signal) =>
+    axiosInstance.get('/products/select/', { params, ...(signal ? { signal } : {}) });
+
 /** Загрузить все страницы товаров в один массив (для выпадающих списков и карт товаров). */
 export const getProductsAllPages = async (signal) => {
     const all = [];
@@ -127,6 +134,29 @@ export const getProductsAllPages = async (signal) => {
         page += 1;
     }
     return all;
+};
+
+// Кэш товаров, чтобы не делать 20+ запросов в нескольких компонентах одновременно.
+let _allProductsCache = null;
+let _allProductsPromise = null;
+
+/**
+ * Товары одним списком с кэшем.
+ * Важно: используется для UI (списки/маппинг id->name). Данные обновляются после перезагрузки страницы.
+ */
+export const getAllProductsCached = async (signal) => {
+    if (Array.isArray(_allProductsCache)) return _allProductsCache;
+    if (_allProductsPromise) return _allProductsPromise;
+
+    _allProductsPromise = (async () => {
+        const list = await getProductsAllPages(signal);
+        _allProductsCache = Array.isArray(list) ? list : [];
+        return _allProductsCache;
+    })().finally(() => {
+        _allProductsPromise = null;
+    });
+
+    return _allProductsPromise;
 };
 
 export const createProduct = (data) => axiosInstance.post('/products/', data);

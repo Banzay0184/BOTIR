@@ -1,8 +1,9 @@
 import React, {useState, useEffect, useRef} from 'react';
 import Select from 'react-select';
+import AsyncSelect from 'react-select/async';
 import {Dialog, DialogHeader, DialogBody, DialogFooter, Button, Input} from '@material-tailwind/react';
 import {LockClosedIcon} from '@heroicons/react/24/solid';
-import { createIncome, updateIncome, getIncomeById, getCompanies, getProductsAllPages, checkMarkingExists, getApiErrorMessage } from '../api/api';
+import { createIncome, updateIncome, getIncomeById, getCompanies, getProductsSelect, checkMarkingExists, getApiErrorMessage } from '../api/api';
 import AddCompanyModal from './AddCompanyModal';
 import AddProductModal from './AddProductModal';
 import * as XLSX from 'xlsx';
@@ -60,14 +61,14 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome, income: editIncome, onUpd
 
         const fetchProducts = async () => {
             try {
-                const productsList = await getProductsAllPages();
-                const list = Array.isArray(productsList) ? productsList : [];
-                const options = list.map(product => ({
+                // Быстрый дефолтный список (первая страница). Поиск работает через AsyncSelect.
+                const response = await getProductsSelect({ page: 1 });
+                const list = response.data?.results ?? response.data ?? [];
+                const options = (Array.isArray(list) ? list : []).map(product => ({
                     value: product.id,
                     label: product.name,
                     kpi: product.kpi,
                     price: product.price,
-                    quantity: product.quantity ?? 0,
                 }));
                 setProductOptions((prev) => {
                     const combined = [...options];
@@ -195,25 +196,49 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome, income: editIncome, onUpd
         setManualTotal(true);
     };
 
-    const handleProductSelect = async (index, selectedProductId) => {
-        const selectedProduct = productOptions.find(product => product.value === selectedProductId);
+    const handleProductSelect = (index, selectedOption) => {
+        if (!selectedOption?.value) return;
+        const newProducts = [...formData.products];
+        newProducts[index] = {
+            id: selectedOption.value,
+            name: selectedOption.label,
+            kpi: selectedOption.kpi ?? '',
+            price: selectedOption.price ?? '',
+            quantity: '',
+            markings: [],
+        };
+        setFormData((prevData) => ({
+            ...prevData,
+            products: newProducts,
+            total: manualTotal ? prevData.total : calculateTotal(newProducts),
+        }));
+        setFileInputKey(Date.now()); // Сброс ключа для обновления инпута файла
+    };
 
-        if (selectedProduct) {
-            const newProducts = [...formData.products];
-            newProducts[index] = {
-                id: selectedProduct.value,
-                name: selectedProduct.label,
-                kpi: selectedProduct.kpi,
-                price: selectedProduct.price,
-                quantity: '',
-                markings: [],
-            };
-            setFormData((prevData) => ({
-                ...prevData,
-                products: newProducts,
-                total: manualTotal ? prevData.total : calculateTotal(newProducts),
+    const handleLoadProductOptions = async (inputValue) => {
+        const q = String(inputValue ?? '').trim();
+        // Минимум 1 символ — чтобы не долбить API на каждый фокус.
+        if (q.length < 1) return productOptions;
+        try {
+            const response = await getProductsSelect({ q, page: 1 });
+            const list = response.data?.results ?? response.data ?? [];
+            const options = (Array.isArray(list) ? list : []).map((product) => ({
+                value: product.id,
+                label: product.name,
+                kpi: product.kpi,
+                price: product.price,
             }));
-            setFileInputKey(Date.now()); // Сброс ключа для обновления инпута файла
+            setProductOptions((prev) => {
+                const combined = [...prev];
+                options.forEach((o) => {
+                    if (!combined.some((c) => Number(c.value) === Number(o.value))) combined.push(o);
+                });
+                return combined;
+            });
+            return options;
+        } catch (err) {
+            console.error('Error searching products:', err);
+            return [];
         }
     };
 
@@ -623,10 +648,12 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome, income: editIncome, onUpd
                                 <h1 className=' text-lg font-bold mb-4 text-blue-500 '>Продукт {index + 1}</h1>
                                 <div className="flex items-center mb-2 space-x-2">
                                     <div className="w-full">
-                                        <Select
+                                        <AsyncSelect
                                             className="w-[100%]"
-                                            options={productOptions}
-                                            onChange={(option) => handleProductSelect(index, option.value)}
+                                            cacheOptions
+                                            defaultOptions={productOptions}
+                                            loadOptions={handleLoadProductOptions}
+                                            onChange={(option) => handleProductSelect(index, option)}
                                             placeholder="Выберите продукт"
                                             value={
                                                 productOptions.find((o) => Number(o.value) === Number(formData.products[index]?.id)) ||

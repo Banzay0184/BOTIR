@@ -1,7 +1,7 @@
 import React, {useState, useEffect} from 'react';
 import {Button} from '@material-tailwind/react';
 import SimpleDialog from './SimpleDialog';
-import { getProductsAllPages } from '../api/api';
+import { getAllProductsCached } from '../api/api';
 
 const OutcomeDetails = ({isOpen, onClose, outcome, onShowDocument}) => {
     const [products, setProducts] = useState({});
@@ -10,7 +10,7 @@ const OutcomeDetails = ({isOpen, onClose, outcome, onShowDocument}) => {
         const controller = new AbortController();
         const fetchProducts = async () => {
             try {
-                const list = await getProductsAllPages(controller.signal);
+                const list = await getAllProductsCached(controller.signal);
                 if (controller.signal?.aborted) return;
                 const productMap = (Array.isArray(list) ? list : []).reduce((map, product) => {
                     map[product.id] = { name: product.name, price: product.price };

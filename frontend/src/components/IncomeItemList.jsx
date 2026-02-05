@@ -1,6 +1,6 @@
 import React, {useState, useEffect} from 'react';
 import {Typography} from '@material-tailwind/react';
-import { updateMarking, deleteMarking, getProductsAllPages, canEdit } from '../api/api';
+import { updateMarking, deleteMarking, canEdit } from '../api/api';
 import MarkingEditModal from './MarkingEditModal.jsx';
 
 const IncomeItemList = ({
@@ -14,43 +14,21 @@ const IncomeItemList = ({
                         }) => {
     const [selectedMarking, setSelectedMarking] = useState(null);
     const [isModalOpen, setModalOpen] = useState(false);
-    const [products, setProducts] = useState({});
     const [markingToDelete, setMarkingToDelete] = useState(null);
     const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
-
-    useEffect(() => {
-        const fetchProducts = async () => {
-            try {
-                const list = await getProductsAllPages();
-                const productMap = (Array.isArray(list) ? list : []).reduce((map, product) => {
-                    map[product.id] = { name: product.name, kpi: product.kpi };
-                    return map;
-                }, {});
-                setProducts(productMap);
-            } catch (error) {
-                console.error('Failed to fetch products:', error);
-            }
-        };
-
-        fetchProducts();
-    }, []);
 
     const filteredIncomes = incomes.flatMap((income) =>
         (income.product_markings || []).filter(
             (marking) =>
                 !marking.outcome &&
                 (marking.marking.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    (products[marking.product]?.name || '')
+                    String(marking.product_name ?? '')
                         .toLowerCase()
                         .includes(searchTerm.toLowerCase()))
         ).map((marking) => ({
             ...marking,
-            productName: products[marking.product]
-                ? products[marking.product].name
-                : `Product ID ${marking.product}`,
-            kpi: products[marking.product]
-                ? products[marking.product].kpi
-                : 'No KPI',
+            productName: marking.product_name ?? `Product ID ${marking.product}`,
+            kpi: marking.product_kpi ?? 'No KPI',
             unitOfMeasure: income.unit_of_measure,
             incomeId: income.id,
             productId: marking.product,

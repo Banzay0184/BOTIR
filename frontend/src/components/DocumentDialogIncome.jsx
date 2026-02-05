@@ -1,7 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import { Button } from '@material-tailwind/react';
 import SimpleDialog from './SimpleDialog';
-import { getProductsAllPages } from '../api/api';
+import { getAllProductsCached } from '../api/api';
 
 const DocumentDialogIncome = ({ isOpen, onClose, income }) => {
     const [productDetails, setProductDetails] = useState([]);
@@ -9,7 +9,7 @@ const DocumentDialogIncome = ({ isOpen, onClose, income }) => {
     useEffect(() => {
         const fetchProductDetails = async () => {
             try {
-                const productsList = await getProductsAllPages();
+                const productsList = await getAllProductsCached();
                 const list = Array.isArray(productsList) ? productsList : [];
                 const details = income.product_markings.map((marking) => {
                     const product = list.find((p) => p.id === marking.product);

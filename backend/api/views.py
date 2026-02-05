@@ -24,6 +24,7 @@ from warehouse.models import Company, Product, ProductMarking, Income, Outcome, 
 from .serializers import (
     CompanySerializer, ProductSerializer, ProductMarkingSerializer, IncomeSerializer,
     OutcomeSerializer,
+    ProductSelectSerializer,
     AdminUserListSerializer, AdminUserCreateSerializer, AdminUserUpdateSerializer, GroupSerializer,
 )
 from .permissions import IsOperatorOrAdminOrReadOnly, IsPlatformAdmin
@@ -46,6 +47,29 @@ class ProductViewSet(viewsets.ModelViewSet):
     )
     serializer_class = ProductSerializer
     permission_classes = [IsAuthenticated, IsOperatorOrAdminOrReadOnly]
+
+    @action(detail=False, methods=['get'], url_path='select')
+    def select(self, request, *args, **kwargs):
+        """
+        Быстрый список товаров для выпадающих списков/поиска.
+        Важно: без annotate(stock=...), иначе запросы могут быть очень тяжёлыми.
+
+        Query params:
+        - q: строка поиска по name/kpi
+        - page: стандартная пагинация DRF (PageNumberPagination)
+        """
+        q = (request.query_params.get('q') or '').strip()
+        qs = Product.objects.all()
+        if q:
+            qs = qs.filter(Q(name__icontains=q) | Q(kpi__icontains=q))
+        qs = qs.order_by('name', 'id')
+
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = ProductSelectSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = ProductSelectSerializer(qs, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class ProductMarkingViewSet(viewsets.ModelViewSet):
