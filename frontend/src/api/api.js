@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_URL = 'http://127.0.0.1:8000/api/v1';  // Adjust the URL as needed
+// const API_URL = 'http://127.0.0.1:8000/api/v1';  // Adjust the URL as needed
+const API_URL = 'https://banzay.pythonanywhere.com/api/v1';
 
 // Единый формат ошибок API: { error: { code, message, details } }
 // Упрощает тосты, локализацию и логирование.
@@ -25,8 +26,6 @@ export const getApiError = (err) => {
 export const getApiErrorMessage = (err) => getApiError(err).message;
 export const getApiErrorCode = (err) => getApiError(err).code;
 export const getApiErrorDetails = (err) => getApiError(err).details;
-
-// const API_URL = 'https://banzay.pythonanywhere.com/api/v1';
 
 
 const axiosInstance = axios.create({
