@@ -4,7 +4,7 @@ import {Dialog, DialogHeader, DialogBody, DialogFooter, Button, Input} from '@ma
 import { createOutcome, getCompanies, getApiErrorMessage } from '../api/api';
 import AddCompanyModal from './AddCompanyModal';
 
-const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarkings, setIncomes}) => {
+const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarkings, setMarkings}) => {
     const [formData, setFormData] = useState({
         to_company: {
             id: '',
@@ -126,13 +126,11 @@ const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarki
             const response = await createOutcome(outcomeData);
             console.log('Outcome created successfully:', response.data);
 
-            setIncomes((prevIncomes) =>
-                prevIncomes.map((income) => ({
-                    ...income,
-                    product_markings: income.product_markings.filter(
-                        (marking) => !selectedMarkings.some((selected) => selected.id === marking.id)
-                    ),
-                }))
+            // Убираем выбранные маркировки из списка
+            setMarkings((prevMarkings) =>
+                prevMarkings.filter(
+                    (marking) => !selectedMarkings.some((selected) => selected.id === marking.id)
+                )
             );
 
             setSelectedMarkings([]); // Сбрасываем выбранные markings

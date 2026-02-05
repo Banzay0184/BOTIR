@@ -3,43 +3,47 @@ import {Card, Typography, Button} from "@material-tailwind/react";
 import IncomeItemList from "./IncomeItemList.jsx";
 import AddIncomeModal from './AddIncomeModal.jsx';
 import OutcomeCreateModal from './OutcomeCreateModal.jsx';
-import { getIncomes, canEdit, getApiErrorMessage } from '../api/api';
+import Pagination from './Pagination.jsx';
+import { getAvailableMarkings, canEdit, getApiErrorMessage } from '../api/api';
 
 const TABLE_HEAD = ["ID", "Название товара", "Единица измерения", "ИКПУ", "Маркировка", "Действия"];
+const PAGE_SIZE = 50;
 
 export default function IncomeList({currentUser}) {
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setModalOpen] = useState(false);
     const [isOutcomeModalOpen, setOutcomeModalOpen] = useState(false);
-    const [totalMarkings, setTotalMarkings] = useState(0);
     const [selectedMarkings, setSelectedMarkings] = useState([]);
-    const [incomes, setIncomes] = useState([]);
-    const [isLoading, setIsLoading] = useState(true); // Состояние загрузки
+    const [markings, setMarkings] = useState([]);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalCount, setTotalCount] = useState(0);
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         const controller = new AbortController();
-        const fetchIncomes = async () => {
+        const fetchMarkings = async () => {
             try {
                 setIsLoading(true);
-                const response = await getIncomes(controller.signal);
+                const response = await getAvailableMarkings(
+                    { search: searchTerm, page: currentPage }, 
+                    controller.signal
+                );
                 if (controller.signal.aborted) return;
-                const data = response.data?.results ?? response.data;
-                setIncomes(Array.isArray(data) ? data : []);
+                
+                const data = response.data;
+                setMarkings(data?.results ?? []);
+                setTotalCount(data?.count ?? 0);
             } catch (error) {
                 if (controller.signal.aborted) return;
-                console.error('Failed to fetch incomes:', getApiErrorMessage(error), error);
+                console.error('Failed to fetch markings:', getApiErrorMessage(error), error);
             } finally {
                 if (!controller.signal.aborted) setIsLoading(false);
             }
         };
-
-        fetchIncomes();
+        
+        fetchMarkings();
         return () => controller.abort();
-    }, []);
-
-    const handleUpdateMarkingCount = (count) => {
-        setTotalMarkings(count);
-    };
+    }, [currentPage, searchTerm]);
 
     const toggleModal = () => {
         setModalOpen(!isModalOpen);
@@ -54,8 +58,13 @@ export default function IncomeList({currentUser}) {
     };
 
     const handleAddIncome = (income) => {
-        setIncomes((prevIncomes) => [...prevIncomes, income]);
         setModalOpen(false);
+        // Refresh the list to show the new income
+        setCurrentPage(1);
+    };
+
+    const handlePageChange = (page) => {
+        setCurrentPage(page);
     };
 
     return (
@@ -86,46 +95,54 @@ export default function IncomeList({currentUser}) {
                         </Button>
                     </div>
                     <Typography variant="small" color="blue-gray" className="font-normal mt-4">
-                        Общее количество приходов: {totalMarkings || 0}
+                        Общее количество товаров на складе: {totalCount || 0}
                     </Typography>
                 </div>
 
-                {isLoading ? (  // Показываем индикатор загрузки, пока isLoading = true
+                {isLoading ? (
                     <div className="flex justify-center items-center h-96">
                         <div
                             className="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mb-4"></div>
                     </div>
-                ) : (  // Показываем данные после загрузки
-                    <div className="overflow-x-auto flex-1 min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
-                    <table className="w-full min-w-[600px] table-auto text-left">
-                        <thead>
-                        <tr>
-                            {TABLE_HEAD.map((head) => (
-                                <th key={head} className="border-b border-blue-gray-100 bg-blue-gray-50 p-2 sm:p-4">
-                                    <Typography
-                                        variant="small"
-                                        color="blue-gray"
-                                        className="font-normal leading-none opacity-70"
-                                    >
-                                        {head}
-                                    </Typography>
-                                </th>
-                            ))}
-                        </tr>
-                        </thead>
-                        <tbody>
-                        <IncomeItemList
-                            searchTerm={searchTerm}
-                            onUpdateMarkingCount={handleUpdateMarkingCount}
-                            selectedMarkings={selectedMarkings}
-                            setSelectedMarkings={setSelectedMarkings}
-                            incomes={incomes}
-                            setIncomes={setIncomes}
-                            currentUser={currentUser}
-                        />
-                        </tbody>
-                    </table>
-                    </div>
+                ) : (
+                    <>
+                        <div className="overflow-x-auto flex-1 min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
+                            <table className="w-full min-w-[600px] table-auto text-left">
+                                <thead>
+                                <tr>
+                                    {TABLE_HEAD.map((head) => (
+                                        <th key={head} className="border-b border-blue-gray-100 bg-blue-gray-50 p-2 sm:p-4">
+                                            <Typography
+                                                variant="small"
+                                                color="blue-gray"
+                                                className="font-normal leading-none opacity-70"
+                                            >
+                                                {head}
+                                            </Typography>
+                                        </th>
+                                    ))}
+                                </tr>
+                                </thead>
+                                <tbody>
+                                <IncomeItemList
+                                    markings={markings}
+                                    setMarkings={setMarkings}
+                                    selectedMarkings={selectedMarkings}
+                                    setSelectedMarkings={setSelectedMarkings}
+                                    currentUser={currentUser}
+                                />
+                                </tbody>
+                            </table>
+                        </div>
+                        {totalCount > PAGE_SIZE && (
+                            <Pagination
+                                count={totalCount}
+                                pageSize={PAGE_SIZE}
+                                currentPage={currentPage}
+                                onPageChange={handlePageChange}
+                            />
+                        )}
+                    </>
                 )}
             </Card>
 
@@ -139,7 +156,7 @@ export default function IncomeList({currentUser}) {
                 onClose={handleCloseOutcomeModal}
                 selectedMarkings={selectedMarkings}
                 setSelectedMarkings={setSelectedMarkings}
-                setIncomes={setIncomes}
+                setMarkings={setMarkings}
             />
         </>
     );

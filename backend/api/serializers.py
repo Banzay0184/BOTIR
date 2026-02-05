@@ -101,12 +101,13 @@ class ProductMarkingSerializer(serializers.ModelSerializer):
     product_name = serializers.SerializerMethodField()
     product_kpi = serializers.SerializerMethodField()
     product_price = serializers.SerializerMethodField()
+    income_unit_of_measure = serializers.SerializerMethodField()
 
     class Meta:
         model = ProductMarking
         fields = [
             'id', 'marking', 'counter', 'income', 'outcome', 'product',
-            'product_name', 'product_kpi', 'product_price',
+            'product_name', 'product_kpi', 'product_price', 'income_unit_of_measure',
             'created_at', 'updated_at',
         ]
 
@@ -118,6 +119,9 @@ class ProductMarkingSerializer(serializers.ModelSerializer):
 
     def get_product_price(self, obj):
         return obj.product.price if obj.product_id else None
+
+    def get_income_unit_of_measure(self, obj):
+        return obj.income.unit_of_measure if obj.income_id else None
 
 
 class IncomeSerializer(serializers.ModelSerializer):

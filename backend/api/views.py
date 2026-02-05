@@ -131,6 +131,38 @@ class ProductMarkingViewSet(viewsets.ModelViewSet):
             return self._marking_archived_error(instance.income_id)
         return super().destroy(request, *args, **kwargs)
 
+    @action(detail=False, methods=['get'], url_path='available')
+    def available(self, request, *args, **kwargs):
+        """
+        Список доступных (не списанных) маркировок для главного склада.
+        Фильтры:
+        - outcome IS NULL (товар не списан)
+        - income.is_archive = False (документ прихода не в архиве)
+        
+        Query params:
+        - search: поиск по marking, product_name
+        - page: номер страницы (PAGE_SIZE=50)
+        """
+        qs = ProductMarking.objects.filter(
+            outcome__isnull=True,
+            income__is_archive=False
+        ).select_related('income', 'product').order_by('-created_at')
+        
+        search = (request.query_params.get('search') or '').strip()
+        if search:
+            qs = qs.filter(
+                Q(marking__icontains=search) | 
+                Q(product__name__icontains=search)
+            )
+        
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(qs, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
 
 class IncomeViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsOperatorOrAdminOrReadOnly]

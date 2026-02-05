@@ -164,6 +164,16 @@ export const createProduct = (data) => axiosInstance.post('/products/', data);
 export const getProductMarkings = () => axiosInstance.get('/product-markings/');
 export const createProductMarking = (data) => axiosInstance.post('/product-markings/', data);
 
+/**
+ * Получить доступные (не списанные) маркировки для главного склада.
+ * params: { search, page }
+ */
+export const getAvailableMarkings = (params = {}, signal) =>
+    axiosInstance.get('/product-markings/available/', { 
+        params, 
+        ...(signal ? { signal } : {}) 
+    });
+
 export const getDashboardStats = (year, signal) =>
     axiosInstance.get('/stats/dashboard/', { params: year != null ? { year } : {}, ...(signal ? { signal } : {}) });
 

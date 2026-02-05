@@ -1,15 +1,13 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState} from 'react';
 import {Typography} from '@material-tailwind/react';
 import { updateMarking, deleteMarking, canEdit } from '../api/api';
 import MarkingEditModal from './MarkingEditModal.jsx';
 
 const IncomeItemList = ({
-                            searchTerm,
-                            onUpdateMarkingCount,
+                            markings,
+                            setMarkings,
                             selectedMarkings,
                             setSelectedMarkings,
-                            incomes,
-                            setIncomes,
                             currentUser,
                         }) => {
     const [selectedMarking, setSelectedMarking] = useState(null);
@@ -17,49 +15,23 @@ const IncomeItemList = ({
     const [markingToDelete, setMarkingToDelete] = useState(null);
     const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
 
-    const filteredIncomes = incomes.flatMap((income) =>
-        (income.product_markings || []).filter(
-            (marking) =>
-                !marking.outcome &&
-                (marking.marking.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    String(marking.product_name ?? '')
-                        .toLowerCase()
-                        .includes(searchTerm.toLowerCase()))
-        ).map((marking) => ({
-            ...marking,
-            productName: marking.product_name ?? `Product ID ${marking.product}`,
-            kpi: marking.product_kpi ?? 'No KPI',
-            unitOfMeasure: income.unit_of_measure,
-            incomeId: income.id,
-            productId: marking.product,
-        }))
-    );
-
-    useEffect(() => {
-        onUpdateMarkingCount(filteredIncomes.length);
-    }, [filteredIncomes, onUpdateMarkingCount]);
-
     const handleMarkingChange = async (markingId, newMarking, newMarkingCounter) => {
         if (!selectedMarking) return;
 
-
         try {
             await updateMarking(
-                selectedMarking.incomeId,
-                selectedMarking.productId,
+                selectedMarking.income,
+                selectedMarking.product,
                 markingId,
                 newMarking,
                 newMarkingCounter
             );
-            setIncomes((prevIncomes) =>
-                prevIncomes.map((income) => ({
-                    ...income,
-                    product_markings: (income.product_markings || []).map((marking) =>
-                        marking.id === markingId
-                            ? {...marking, marking: newMarking, counter: newMarkingCounter}
-                            : marking
-                    ),
-                }))
+            setMarkings((prevMarkings) =>
+                prevMarkings.map((marking) =>
+                    marking.id === markingId
+                        ? {...marking, marking: newMarking, counter: newMarkingCounter}
+                        : marking
+                )
             );
         } catch (error) {
             console.error('Failed to update marking:', error);
@@ -68,11 +40,7 @@ const IncomeItemList = ({
     };
 
     const openModal = (marking) => {
-        setSelectedMarking({
-            ...marking,
-            incomeId: marking.incomeId,
-            productId: marking.productId,
-        });
+        setSelectedMarking(marking);
         setModalOpen(true);
     };
 
@@ -90,14 +58,9 @@ const IncomeItemList = ({
         if (!markingToDelete) return;
 
         try {
-            await deleteMarking(markingToDelete.incomeId, markingToDelete.productId, markingToDelete.id);
-            setIncomes((prevIncomes) =>
-                prevIncomes.map((income) => ({
-                    ...income,
-                    product_markings: (income.product_markings || []).filter(
-                        (item) => item.id !== markingToDelete.id
-                    ),
-                }))
+            await deleteMarking(markingToDelete.income, markingToDelete.product, markingToDelete.id);
+            setMarkings((prevMarkings) =>
+                prevMarkings.filter((marking) => marking.id !== markingToDelete.id)
             );
         } catch (error) {
             console.error('Failed to delete marking:', error);
@@ -152,8 +115,8 @@ const IncomeItemList = ({
             )}
 
             {/* Отображение списка маркировок */}
-            {filteredIncomes.map((marking) => (
-                <tr key={`${marking.incomeId}-${marking.productId}-${marking.id}`}
+            {markings.map((marking) => (
+                <tr key={marking.id}
                     className={`${marking.counter ? 'bg-green-100' : 'even:bg-blue-gray-50/50'}`}>
                     <td className="p-4">
                         <div className="inline-flex items-center">
@@ -190,22 +153,22 @@ const IncomeItemList = ({
                     </td>
                     <td className="p-4">
                         <Typography variant="small" color="blue-gray" className="font-normal">
-                            {marking.productName ? marking.productName : 'Unknown Product'}
+                            {marking.product_name ?? 'Unknown Product'}
                         </Typography>
                     </td>
                     <td className="p-4">
                         <Typography variant="small" color="blue-gray" className="font-normal">
-                            {marking.unitOfMeasure ? marking.unitOfMeasure : 'Unknown Unit'}
+                            {marking.income_unit_of_measure ?? '—'}
                         </Typography>
                     </td>
                     <td className="p-4">
                         <Typography variant="small" color="blue-gray" className="font-normal">
-                            {marking.kpi ? marking.kpi : 'No KPI'}
+                            {marking.product_kpi ?? 'No KPI'}
                         </Typography>
                     </td>
                     <td className="p-4">
                         <Typography variant="small" color="blue-gray" className="font-normal">
-                            {marking.marking ? marking.marking : 'Unknown Marking'}
+                            {marking.marking ?? 'Unknown Marking'}
                         </Typography>
                     </td>
                     <td className="p-4">
