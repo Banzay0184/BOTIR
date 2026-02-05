@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getIncomes, deleteIncome, archiveIncome, unarchiveIncome, canEdit } from '../api/api';
+import { getIncomes, deleteIncome, archiveIncome, unarchiveIncome, canEdit, getApiErrorMessage } from '../api/api';
 import IncomeDetails from './IncomeDetails';
 import { Button, Input } from '@material-tailwind/react';
 import AddIncomeModal from './AddIncomeModal';
@@ -41,7 +41,7 @@ const IncomeDocument = ({ currentUser }) => {
                 }
             } catch (error) {
                 if (controller.signal.aborted) return;
-                console.error('Error fetching incomes:', error);
+                console.error('Error fetching incomes:', getApiErrorMessage(error), error);
             } finally {
                 if (!controller.signal.aborted) setIsLoading(false);
             }

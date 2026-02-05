@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getIncomes, getOutcomes, deleteIncome, deleteOutcome, unarchiveIncome, unarchiveOutcome, canEdit } from '../api/api';
+import { getIncomes, getOutcomes, deleteIncome, deleteOutcome, unarchiveIncome, unarchiveOutcome, canEdit, getApiErrorMessage } from '../api/api';
 import IncomeDetails from '../components/IncomeDetails';
 import OutcomeDetails from '../components/OutcomeDetails';
 import { Button } from '@material-tailwind/react';
@@ -23,7 +23,7 @@ const ArchivePage = ({ currentUser }) => {
             const data = response.data?.results ?? response.data;
             setArchivedIncomes(Array.isArray(data) ? [...data].reverse() : []);
         } catch (error) {
-            console.error('Error fetching archived incomes:', error);
+            console.error('Error fetching archived incomes:', getApiErrorMessage(error), error);
         } finally {
             setLoadingIncomes(false);
         }
@@ -36,7 +36,7 @@ const ArchivePage = ({ currentUser }) => {
             const data = response.data?.results ?? response.data;
             setArchivedOutcomes(Array.isArray(data) ? [...data].reverse() : []);
         } catch (error) {
-            console.error('Error fetching archived outcomes:', error);
+            console.error('Error fetching archived outcomes:', getApiErrorMessage(error), error);
         } finally {
             setLoadingOutcomes(false);
         }

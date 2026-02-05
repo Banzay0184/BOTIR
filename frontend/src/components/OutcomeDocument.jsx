@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getOutcomes, deleteOutcome, archiveOutcome, unarchiveOutcome, canEdit } from '../api/api';
+import { getOutcomes, deleteOutcome, archiveOutcome, unarchiveOutcome, canEdit, getApiErrorMessage } from '../api/api';
 import OutcomeDetails from './OutcomeDetails';
 import { Button, Input, Dialog, DialogHeader, DialogBody, DialogFooter } from '@material-tailwind/react';
 import EditOutcomeModal from './EditOutcomeModal';
@@ -42,7 +42,7 @@ const OutcomeDocument = ({ currentUser }) => {
                     console.error('Invalid response data:', response.data);
                 }
             } catch (error) {
-                if (!controller.signal.aborted) console.error('Error fetching outcomes:', error);
+                if (!controller.signal.aborted) console.error('Error fetching outcomes:', getApiErrorMessage(error), error);
             } finally {
                 if (!controller.signal.aborted) setIsLoading(false);
             }

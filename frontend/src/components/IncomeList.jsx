@@ -3,7 +3,7 @@ import {Card, Typography, Button} from "@material-tailwind/react";
 import IncomeItemList from "./IncomeItemList.jsx";
 import AddIncomeModal from './AddIncomeModal.jsx';
 import OutcomeCreateModal from './OutcomeCreateModal.jsx';
-import {getIncomes, canEdit} from '../api/api';
+import { getIncomes, canEdit, getApiErrorMessage } from '../api/api';
 
 const TABLE_HEAD = ["ID", "Название товара", "Единица измерения", "ИКПУ", "Маркировка", "Действия"];
 
@@ -27,7 +27,7 @@ export default function IncomeList({currentUser}) {
                 setIncomes(Array.isArray(data) ? data : []);
             } catch (error) {
                 if (controller.signal.aborted) return;
-                console.error('Failed to fetch incomes:', error);
+                console.error('Failed to fetch incomes:', getApiErrorMessage(error), error);
             } finally {
                 if (!controller.signal.aborted) setIsLoading(false);
             }
