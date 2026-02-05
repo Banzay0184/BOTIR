@@ -4,9 +4,10 @@ import os
 
 from dotenv import load_dotenv
 
-load_dotenv()
-
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
+# Сначала из текущей директории, затем явно из корня проекта (на PythonAnywhere WSGI cwd может быть другой)
+load_dotenv()
+load_dotenv(BASE_DIR / ".env")
 
 ENVIRONMENT = os.getenv("DJANGO_ENV", "dev")  
 

@@ -6,15 +6,9 @@ DEBUG = False
 if "banzay.pythonanywhere.com" not in ALLOWED_HOSTS:
     ALLOWED_HOSTS = list(ALLOWED_HOSTS) + ["banzay.pythonanywhere.com"]
 
-# CORS: если env CORS_ALLOWED_ORIGINS не задан на PythonAnywhere — используем захардкоженный список.
-# Иначе браузер не получит Access-Control-Allow-Origin и будет CORS error.
-# Переопределить можно через env: CORS_ALLOWED_ORIGINS=https://другой.домен
-_default_cors_origins = [
-    "https://www.scclms.uz",
-    "https://scclms.uz",
-]
-if not CORS_ALLOWED_ORIGINS:
-    CORS_ALLOWED_ORIGINS = _default_cors_origins
+# CORS: прод-домены всегда добавляем (даже если в env только localhost — иначе CORS error для scclms.uz)
+_prod_origins = ["https://www.scclms.uz", "https://scclms.uz"]
+CORS_ALLOWED_ORIGINS = list(CORS_ALLOWED_ORIGINS) + [o for o in _prod_origins if o not in CORS_ALLOWED_ORIGINS]
 CORS_ALLOW_CREDENTIALS = True
 # Authorization для Bearer token (django-cors-headers по умолчанию уже разрешает, на всякий случай явно)
 CORS_ALLOW_HEADERS = ["accept", "accept-encoding", "authorization", "content-type", "origin", "x-requested-with"]
