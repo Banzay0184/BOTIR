@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { getOutcomes, deleteOutcome, archiveOutcome, unarchiveOutcome, canEdit, getApiErrorMessage } from '../api/api';
 import OutcomeDetails from './OutcomeDetails';
 import { Button, Input, Dialog, DialogHeader, DialogBody, DialogFooter } from '@material-tailwind/react';
+import Pagination from './Pagination';
 import EditOutcomeModal from './EditOutcomeModal';
 import {
     EyeIcon,
@@ -12,10 +13,11 @@ import {
     ArchiveBoxArrowDownIcon,
 } from '@heroicons/react/24/outline';
 
+const PAGE_SIZE = 50;
+
 const OutcomeDocument = ({ currentUser }) => {
     const navigate = useNavigate();
     const [outcomes, setOutcomes] = useState([]);
-    const [filteredOutcomes, setFilteredOutcomes] = useState([]);
     const [selectedOutcome, setSelectedOutcome] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -24,23 +26,31 @@ const OutcomeDocument = ({ currentUser }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
-    const [isLoading, setIsLoading] = useState(true); // Добавляем состояние загрузки
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalCount, setTotalCount] = useState(0);
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         const controller = new AbortController();
         const fetchOutcomes = async () => {
             try {
                 setIsLoading(true);
-                const response = await getOutcomes({ is_archive: false }, controller.signal);
+                const params = {
+                    is_archive: false,
+                    page: currentPage,
+                };
+                
+                if (searchTerm) params.search = searchTerm;
+                if (startDate) params.date_from = startDate;
+                if (endDate) params.date_to = endDate;
+
+                const response = await getOutcomes(params, controller.signal);
                 if (controller.signal.aborted) return;
-                const data = response.data?.results ?? response.data;
-                if (Array.isArray(data)) {
-                    const sortedData = [...data].reverse();
-                    setOutcomes(sortedData);
-                    setFilteredOutcomes(sortedData);
-                } else {
-                    console.error('Invalid response data:', response.data);
-                }
+                
+                const data = response.data;
+                const results = data?.results ?? [];
+                setOutcomes(Array.isArray(results) ? results : []);
+                setTotalCount(data?.count ?? 0);
             } catch (error) {
                 if (!controller.signal.aborted) console.error('Error fetching outcomes:', getApiErrorMessage(error), error);
             } finally {
@@ -50,37 +60,7 @@ const OutcomeDocument = ({ currentUser }) => {
 
         fetchOutcomes();
         return () => controller.abort();
-    }, []);
-
-    useEffect(() => {
-        filterOutcomes();
-    }, [searchTerm, startDate, endDate, outcomes]);
-
-    const filterOutcomes = () => {
-        let filteredData = outcomes;
-
-        if (searchTerm) {
-            const lowercasedFilter = searchTerm.toLowerCase();
-            filteredData = filteredData.filter(item =>
-                item.to_company?.name.toLowerCase().includes(lowercasedFilter) ||
-                item.contract_date.toLowerCase().includes(lowercasedFilter) ||
-                item.contract_number.toLowerCase().includes(lowercasedFilter) ||
-                item.invoice_date.toLowerCase().includes(lowercasedFilter) ||
-                item.invoice_number.toLowerCase().includes(lowercasedFilter) ||
-                item.total.toString().toLowerCase().includes(lowercasedFilter)
-            );
-        }
-
-        if (startDate) {
-            filteredData = filteredData.filter(item => item.contract_date >= startDate);
-        }
-
-        if (endDate) {
-            filteredData = filteredData.filter(item => item.contract_date <= endDate);
-        }
-
-        setFilteredOutcomes(filteredData);
-    };
+    }, [currentPage, searchTerm, startDate, endDate]);
 
     const handleViewDetails = (outcome) => {
         setSelectedOutcome(outcome);
@@ -103,16 +83,10 @@ const OutcomeDocument = ({ currentUser }) => {
     };
 
     const handleUpdateOutcome = (updatedOutcome) => {
-        setOutcomes(prevOutcomes =>
-            prevOutcomes.map(outcome =>
-                outcome.id === updatedOutcome?.id ? updatedOutcome : outcome
-            )
-        );
-        setFilteredOutcomes(prevOutcomes =>
-            prevOutcomes.map(outcome =>
-                outcome.id === updatedOutcome?.id ? updatedOutcome : outcome
-            )
-        );
+        setOutcomes(prev => prev.map(outcome => 
+            outcome.id === updatedOutcome.id ? updatedOutcome : outcome
+        ));
+        console.log("Обновлён outcome:", updatedOutcome);
     };
 
     const openConfirmDeleteModal = (outcomeId) => {
@@ -124,7 +98,7 @@ const OutcomeDocument = ({ currentUser }) => {
         try {
             await archiveOutcome(outcomeId);
             setOutcomes(prev => prev.filter(o => o.id !== outcomeId));
-            setFilteredOutcomes(prev => prev.filter(o => o.id !== outcomeId));
+            setTotalCount(prev => Math.max(0, prev - 1));
         } catch (error) {
             console.error('Ошибка при архивации:', error);
         }
@@ -134,7 +108,7 @@ const OutcomeDocument = ({ currentUser }) => {
         try {
             await unarchiveOutcome(outcomeId);
             setOutcomes(prev => prev.filter(o => o.id !== outcomeId));
-            setFilteredOutcomes(prev => prev.filter(o => o.id !== outcomeId));
+            setTotalCount(prev => Math.max(0, prev - 1));
         } catch (error) {
             console.error('Ошибка при разархивации:', error);
         }
@@ -142,25 +116,47 @@ const OutcomeDocument = ({ currentUser }) => {
 
     const handleDeleteOutcome = async () => {
         try {
-            await deleteOutcome(outcomeToDelete); // Удаляем расход
-            setOutcomes(prevOutcomes => prevOutcomes.filter(outcome => outcome.id !== outcomeToDelete));
-            setFilteredOutcomes(prevOutcomes => prevOutcomes.filter(outcome => outcome.id !== outcomeToDelete));
-            setIsConfirmDeleteOpen(false); // Закрываем модальное окно
+            await deleteOutcome(outcomeToDelete);
+            setOutcomes(prev => prev.filter(outcome => outcome.id !== outcomeToDelete));
+            setTotalCount(prev => Math.max(0, prev - 1));
+            setIsConfirmDeleteOpen(false);
         } catch (error) {
             console.error('Ошибка при удалении расхода:', error);
         }
     };
 
+    const handlePageChange = (page) => {
+        setCurrentPage(page);
+    };
+
+    const handleSearchChange = (value) => {
+        setSearchTerm(value);
+        setCurrentPage(1);
+    };
+
+    const handleStartDateChange = (value) => {
+        setStartDate(value);
+        setCurrentPage(1);
+    };
+
+    const handleEndDateChange = (value) => {
+        setEndDate(value);
+        setCurrentPage(1);
+    };
+
     return (
         <div className="p-3 sm:p-4 w-full min-w-0 overflow-auto">
-            <h2 className="text-lg sm:text-xl font-bold mb-4">Список расходов</h2>
+            <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg sm:text-xl font-bold">Список расходов</h2>
+                <span className="text-sm text-gray-600">Всего: {totalCount}</span>
+            </div>
             <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                 <div className="min-w-0 w-full">
                     <Input
                         type="text"
                         label="Поиск"
                         value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onChange={(e) => handleSearchChange(e.target.value)}
                         placeholder="Компания, контракт, счёт..."
                         className="!min-w-0"
                         containerProps={{ className: 'min-w-0' }}
@@ -171,7 +167,7 @@ const OutcomeDocument = ({ currentUser }) => {
                         type="date"
                         label="Дата начала"
                         value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
+                        onChange={(e) => handleStartDateChange(e.target.value)}
                         className="!min-w-0"
                         containerProps={{ className: 'min-w-0' }}
                     />
@@ -181,33 +177,41 @@ const OutcomeDocument = ({ currentUser }) => {
                         type="date"
                         label="Дата окончания"
                         value={endDate}
-                        onChange={(e) => setEndDate(e.target.value)}
+                        onChange={(e) => handleEndDateChange(e.target.value)}
                         className="!min-w-0"
                         containerProps={{ className: 'min-w-0' }}
                     />
                 </div>
             </div>
 
-            {isLoading ? (  // Отображаем анимацию загрузки, если данные загружаются
+            {isLoading ? (
                 <div className="flex justify-center items-center h-96">
                     <div className="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mb-4"></div>
                 </div>
-            ) : (  // Отображаем данные, если загрузка завершена
-                <div className="overflow-x-auto -mx-3 sm:-mx-4" style={{ WebkitOverflowScrolling: 'touch' }}>
-                <table className="min-w-[640px] w-full bg-white border">
-                    <thead>
-                    <tr>
-                        <th className="py-2 px-2 sm:px-4 border text-left text-sm">Компания</th>
-                        <th className="py-2 px-2 sm:px-4 border text-left text-sm">Дата контракта</th>
-                        <th className="py-2 px-2 sm:px-4 border text-left text-sm">Номер контракта</th>
-                        <th className="py-2 px-2 sm:px-4 border text-left text-sm">Дата счета</th>
-                        <th className="py-2 px-2 sm:px-4 border text-left text-sm">Номер счета</th>
-                        <th className="py-2 px-2 sm:px-4 border text-left text-sm">Общая сумма</th>
-                        <th className="py-2 px-2 sm:px-4 border text-left text-sm whitespace-nowrap">Действия</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {filteredOutcomes.map((outcome) => (
+            ) : (
+                <>
+                    <div className="overflow-x-auto -mx-3 sm:-mx-4" style={{ WebkitOverflowScrolling: 'touch' }}>
+                        <table className="min-w-[640px] w-full bg-white border">
+                            <thead>
+                            <tr>
+                                <th className="py-2 px-2 sm:px-4 border text-left text-sm">Компания</th>
+                                <th className="py-2 px-2 sm:px-4 border text-left text-sm">Дата контракта</th>
+                                <th className="py-2 px-2 sm:px-4 border text-left text-sm">Номер контракта</th>
+                                <th className="py-2 px-2 sm:px-4 border text-left text-sm">Дата счета</th>
+                                <th className="py-2 px-2 sm:px-4 border text-left text-sm">Номер счета</th>
+                                <th className="py-2 px-2 sm:px-4 border text-left text-sm">Общая сумма</th>
+                                <th className="py-2 px-2 sm:px-4 border text-left text-sm whitespace-nowrap">Действия</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            {outcomes.length === 0 ? (
+                                <tr>
+                                    <td colSpan={7} className="py-4 text-center text-gray-500">
+                                        Нет расходов
+                                    </td>
+                                </tr>
+                            ) : (
+                                outcomes.map((outcome) => (
                         outcome && outcome.id ? (
                             <tr key={outcome.id} className="border-b">
                                 <td className="py-2 px-2 sm:px-4 border text-sm truncate max-w-[120px] sm:max-w-none">{outcome.to_company?.name}</td>
@@ -274,11 +278,21 @@ const OutcomeDocument = ({ currentUser }) => {
                                     </div>
                                 </td>
                             </tr>
-                        ) : null
-                    ))}
-                    </tbody>
-                </table>
-                </div>
+                            ) : null
+                        ))
+                    )}
+                            </tbody>
+                        </table>
+                    </div>
+                    {totalCount > PAGE_SIZE && (
+                        <Pagination
+                            count={totalCount}
+                            pageSize={PAGE_SIZE}
+                            currentPage={currentPage}
+                            onPageChange={handlePageChange}
+                        />
+                    )}
+                </>
             )}
 
             {/* Модальное окно подтверждения удаления */}

@@ -4,6 +4,7 @@ import { getIncomes, deleteIncome, archiveIncome, unarchiveIncome, canEdit, getA
 import IncomeDetails from './IncomeDetails';
 import { Button, Input } from '@material-tailwind/react';
 import AddIncomeModal from './AddIncomeModal';
+import Pagination from './Pagination';
 import {
     EyeIcon,
     PencilSquareIcon,
@@ -12,33 +13,42 @@ import {
     ArchiveBoxArrowDownIcon,
 } from '@heroicons/react/24/outline';
 
+const PAGE_SIZE = 50;
+
 const IncomeDocument = ({ currentUser }) => {
     const navigate = useNavigate();
     const [incomes, setIncomes] = useState([]);
-    const [filteredIncomes, setFilteredIncomes] = useState([]);
     const [selectedIncome, setSelectedIncome] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
-    const [isLoading, setIsLoading] = useState(true); // Добавляем состояние загрузки
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalCount, setTotalCount] = useState(0);
+    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         const controller = new AbortController();
         const fetchIncomes = async () => {
             try {
                 setIsLoading(true);
-                const response = await getIncomes(controller.signal, { is_archive: false });
+                const params = {
+                    is_archive: false,
+                    page: currentPage,
+                };
+                
+                if (searchTerm) params.search = searchTerm;
+                if (startDate) params.date_from = startDate;
+                if (endDate) params.date_to = endDate;
+
+                const response = await getIncomes(controller.signal, params);
                 if (controller.signal.aborted) return;
-                const data = response.data?.results ?? response.data;
-                if (Array.isArray(data)) {
-                    const sortedData = [...data].reverse();
-                    setIncomes(sortedData);
-                    setFilteredIncomes(sortedData);
-                } else {
-                    console.error('Invalid response data:', response.data);
-                }
+                
+                const data = response.data;
+                const results = data?.results ?? [];
+                setIncomes(Array.isArray(results) ? results : []);
+                setTotalCount(data?.count ?? 0);
             } catch (error) {
                 if (controller.signal.aborted) return;
                 console.error('Error fetching incomes:', getApiErrorMessage(error), error);
@@ -49,37 +59,7 @@ const IncomeDocument = ({ currentUser }) => {
 
         fetchIncomes();
         return () => controller.abort();
-    }, []);
-
-    useEffect(() => {
-        filterIncomes();
-    }, [searchTerm, startDate, endDate, incomes]);
-
-    const filterIncomes = () => {
-        let filteredData = incomes;
-
-        if (searchTerm) {
-            const lowercasedFilter = searchTerm.toLowerCase();
-            filteredData = filteredData.filter(item =>
-                item.from_company?.name.toLowerCase().includes(lowercasedFilter) ||
-                item.contract_date.toLowerCase().includes(lowercasedFilter) ||
-                item.contract_number.toLowerCase().includes(lowercasedFilter) ||
-                item.invoice_date.toLowerCase().includes(lowercasedFilter) ||
-                item.invoice_number.toLowerCase().includes(lowercasedFilter) ||
-                item.total.toString().toLowerCase().includes(lowercasedFilter)
-            );
-        }
-
-        if (startDate) {
-            filteredData = filteredData.filter(item => item.created_at >= startDate);
-        }
-
-        if (endDate) {
-            filteredData = filteredData.filter(item => item.created_at <= endDate);
-        }
-
-        setFilteredIncomes(filteredData);
-    };
+    }, [currentPage, searchTerm, startDate, endDate]);
 
     const handleViewDetails = (income) => {
         setSelectedIncome(income);
@@ -102,22 +82,19 @@ const IncomeDocument = ({ currentUser }) => {
     };
 
     const handleUpdateIncome = (updatedIncome) => {
-        const updatedIncomes = [
-            updatedIncome,
-            ...incomes.filter(income => income.id !== updatedIncome?.id)
-        ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
-        setIncomes(updatedIncomes);
-        setFilteredIncomes(updatedIncomes);
-
-        console.log("Последний добавленный income:", updatedIncome);
+        // Обновляем список на текущей странице
+        setIncomes(prev => prev.map(income => 
+            income.id === updatedIncome.id ? updatedIncome : income
+        ));
+        console.log("Обновлён income:", updatedIncome);
     };
 
     const handleArchiveIncome = async (incomeId) => {
         try {
             await archiveIncome(incomeId);
+            // Убираем из списка, т.к. он стал архивным
             setIncomes(prev => prev.filter(i => i.id !== incomeId));
-            setFilteredIncomes(prev => prev.filter(i => i.id !== incomeId));
+            setTotalCount(prev => Math.max(0, prev - 1));
         } catch (error) {
             console.error('Ошибка при архивации:', error);
         }
@@ -127,7 +104,7 @@ const IncomeDocument = ({ currentUser }) => {
         try {
             await unarchiveIncome(incomeId);
             setIncomes(prev => prev.filter(i => i.id !== incomeId));
-            setFilteredIncomes(prev => prev.filter(i => i.id !== incomeId));
+            setTotalCount(prev => Math.max(0, prev - 1));
         } catch (error) {
             console.error('Ошибка при разархивации:', error);
         }
@@ -136,23 +113,45 @@ const IncomeDocument = ({ currentUser }) => {
     const handleDeleteIncome = async (incomeId) => {
         try {
             await deleteIncome(incomeId);
-            setIncomes(incomes.filter(income => income.id !== incomeId));
-            setFilteredIncomes(filteredIncomes.filter(income => income.id !== incomeId));
+            setIncomes(prev => prev.filter(income => income.id !== incomeId));
+            setTotalCount(prev => Math.max(0, prev - 1));
         } catch (error) {
             console.error('Ошибка при удалении дохода:', error);
         }
     };
 
+    const handlePageChange = (page) => {
+        setCurrentPage(page);
+    };
+
+    const handleSearchChange = (value) => {
+        setSearchTerm(value);
+        setCurrentPage(1); // Сброс на первую страницу при поиске
+    };
+
+    const handleStartDateChange = (value) => {
+        setStartDate(value);
+        setCurrentPage(1);
+    };
+
+    const handleEndDateChange = (value) => {
+        setEndDate(value);
+        setCurrentPage(1);
+    };
+
     return (
         <div className="p-3 sm:p-4 w-full min-w-0 overflow-auto">
-            <h2 className="text-lg sm:text-xl font-bold mb-4">Список приходов</h2>
+            <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg sm:text-xl font-bold">Список приходов</h2>
+                <span className="text-sm text-gray-600">Всего: {totalCount}</span>
+            </div>
             <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                 <div className="min-w-0 w-full">
                     <Input
                         type="text"
                         label="Поиск"
                         value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onChange={(e) => handleSearchChange(e.target.value)}
                         placeholder="Компания, контракт, счёт..."
                         className="!min-w-0"
                         containerProps={{ className: 'min-w-0' }}
@@ -163,7 +162,7 @@ const IncomeDocument = ({ currentUser }) => {
                         type="date"
                         label="Дата начала"
                         value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
+                        onChange={(e) => handleStartDateChange(e.target.value)}
                         className="!min-w-0"
                         containerProps={{ className: 'min-w-0' }}
                     />
@@ -173,104 +172,122 @@ const IncomeDocument = ({ currentUser }) => {
                         type="date"
                         label="Дата окончания"
                         value={endDate}
-                        onChange={(e) => setEndDate(e.target.value)}
+                        onChange={(e) => handleEndDateChange(e.target.value)}
                         className="!min-w-0"
                         containerProps={{ className: 'min-w-0' }}
                     />
                 </div>
             </div>
 
-            {isLoading ? ( // Отображение индикатора загрузки, если данные загружаются
+            {isLoading ? (
                 <div className="flex justify-center items-center h-96">
                     <div className="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mb-4"></div>
                 </div>
-            ) : ( // Отображение данных, когда загрузка завершена
-                <div className="overflow-x-auto -mx-3 sm:-mx-4" style={{ WebkitOverflowScrolling: 'touch' }}>
-                <table className="min-w-[640px] w-full bg-white border">
-                    <thead>
-                    <tr>
-                        <th className="py-2 px-2 sm:px-4 border text-left text-sm">Компания</th>
-                        <th className="py-2 px-2 sm:px-4 border text-left text-sm">Дата контракта</th>
-                        <th className="py-2 px-2 sm:px-4 border text-left text-sm">Номер контракта</th>
-                        <th className="py-2 px-2 sm:px-4 border text-left text-sm">Дата счета</th>
-                        <th className="py-2 px-2 sm:px-4 border text-left text-sm">Номер счета</th>
-                        <th className="py-2 px-2 sm:px-4 border text-left text-sm">Общая сумма</th>
-                        <th className="py-2 px-2 sm:px-4 border text-left text-sm whitespace-nowrap">Действия</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {filteredIncomes.map((income) => (
-                        income && income.id ? (
-                            <tr key={income.id} className="border-b">
-                                <td className="py-2 px-2 sm:px-4 border text-sm truncate max-w-[120px] sm:max-w-none">{income.from_company?.name}</td>
-                                <td className="py-2 px-2 sm:px-4 border text-sm whitespace-nowrap">{income.contract_date}</td>
-                                <td className="py-2 px-2 sm:px-4 border text-sm truncate max-w-[100px] sm:max-w-none">{income.contract_number}</td>
-                                <td className="py-2 px-2 sm:px-4 border text-sm whitespace-nowrap">{income.invoice_date}</td>
-                                <td className="py-2 px-2 sm:px-4 border text-sm truncate max-w-[100px] sm:max-w-none">{income.invoice_number}</td>
-                                <td className="py-2 px-2 sm:px-4 border text-sm whitespace-nowrap">{income.total.toLocaleString()} сум.</td>
-                                <td className="py-2 px-2 sm:px-4 border">
-                                    <div className="flex flex-wrap gap-1 sm:gap-2 items-center">
-                                        <button
-                                            type="button"
-                                            onClick={() => handleViewDetails(income)}
-                                            className="p-2 rounded-lg text-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                            title="Просмотр"
-                                            aria-label="Просмотр"
-                                        >
-                                            <EyeIcon className="w-5 h-5" />
-                                        </button>
-                                        <button
-                                            type="button"
-                                            disabled={!canEdit()}
-                                            onClick={() => handleEditIncome(income)}
-                                            className="p-2 rounded-lg text-green-600 hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:pointer-events-none"
-                                            title="Редактировать"
-                                            aria-label="Редактировать"
-                                        >
-                                            <PencilSquareIcon className="w-5 h-5" />
-                                        </button>
-                                        {income.is_archive ? (
-                                            <button
-                                                type="button"
-                                                disabled={!canEdit()}
-                                                onClick={() => handleDeleteIncome(income.id)}
-                                                className="p-2 rounded-lg text-red-600 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 disabled:pointer-events-none"
-                                                title="Удалить"
-                                                aria-label="Удалить"
-                                            >
-                                                <TrashIcon className="w-5 h-5" />
-                                            </button>
-                                        ) : (
-                                            <button
-                                                type="button"
-                                                disabled={!canEdit()}
-                                                onClick={() => handleArchiveIncome(income.id)}
-                                                className="p-2 rounded-lg text-orange-600 hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 disabled:pointer-events-none"
-                                                title="Архивировать"
-                                                aria-label="Архивировать"
-                                            >
-                                                <ArchiveBoxIcon className="w-5 h-5" />
-                                            </button>
-                                        )}
-                                        {income.is_archive && canEdit() && (
-                                            <button
-                                                type="button"
-                                                onClick={() => handleUnarchiveIncome(income.id)}
-                                                className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-500"
-                                                title="Разархивировать"
-                                                aria-label="Разархивировать"
-                                            >
-                                                <ArchiveBoxArrowDownIcon className="w-5 h-5" />
-                                            </button>
-                                        )}
-                                    </div>
-                                </td>
+            ) : (
+                <>
+                    <div className="overflow-x-auto -mx-3 sm:-mx-4" style={{ WebkitOverflowScrolling: 'touch' }}>
+                        <table className="min-w-[640px] w-full bg-white border">
+                            <thead>
+                            <tr>
+                                <th className="py-2 px-2 sm:px-4 border text-left text-sm">Компания</th>
+                                <th className="py-2 px-2 sm:px-4 border text-left text-sm">Дата контракта</th>
+                                <th className="py-2 px-2 sm:px-4 border text-left text-sm">Номер контракта</th>
+                                <th className="py-2 px-2 sm:px-4 border text-left text-sm">Дата счета</th>
+                                <th className="py-2 px-2 sm:px-4 border text-left text-sm">Номер счета</th>
+                                <th className="py-2 px-2 sm:px-4 border text-left text-sm">Общая сумма</th>
+                                <th className="py-2 px-2 sm:px-4 border text-left text-sm whitespace-nowrap">Действия</th>
                             </tr>
-                        ) : null
-                    ))}
-                    </tbody>
-                </table>
-                </div>
+                            </thead>
+                            <tbody>
+                            {incomes.length === 0 ? (
+                                <tr>
+                                    <td colSpan={7} className="py-4 text-center text-gray-500">
+                                        Нет приходов
+                                    </td>
+                                </tr>
+                            ) : (
+                                incomes.map((income) => (
+                                    income && income.id ? (
+                                        <tr key={income.id} className="border-b">
+                                            <td className="py-2 px-2 sm:px-4 border text-sm truncate max-w-[120px] sm:max-w-none">{income.from_company?.name}</td>
+                                            <td className="py-2 px-2 sm:px-4 border text-sm whitespace-nowrap">{income.contract_date}</td>
+                                            <td className="py-2 px-2 sm:px-4 border text-sm truncate max-w-[100px] sm:max-w-none">{income.contract_number}</td>
+                                            <td className="py-2 px-2 sm:px-4 border text-sm whitespace-nowrap">{income.invoice_date}</td>
+                                            <td className="py-2 px-2 sm:px-4 border text-sm truncate max-w-[100px] sm:max-w-none">{income.invoice_number}</td>
+                                            <td className="py-2 px-2 sm:px-4 border text-sm whitespace-nowrap">{income.total.toLocaleString()} сум.</td>
+                                            <td className="py-2 px-2 sm:px-4 border">
+                                                <div className="flex flex-wrap gap-1 sm:gap-2 items-center">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleViewDetails(income)}
+                                                        className="p-2 rounded-lg text-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                        title="Просмотр"
+                                                        aria-label="Просмотр"
+                                                    >
+                                                        <EyeIcon className="w-5 h-5" />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        disabled={!canEdit()}
+                                                        onClick={() => handleEditIncome(income)}
+                                                        className="p-2 rounded-lg text-green-600 hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:pointer-events-none"
+                                                        title="Редактировать"
+                                                        aria-label="Редактировать"
+                                                    >
+                                                        <PencilSquareIcon className="w-5 h-5" />
+                                                    </button>
+                                                    {income.is_archive ? (
+                                                        <button
+                                                            type="button"
+                                                            disabled={!canEdit()}
+                                                            onClick={() => handleDeleteIncome(income.id)}
+                                                            className="p-2 rounded-lg text-red-600 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 disabled:pointer-events-none"
+                                                            title="Удалить"
+                                                            aria-label="Удалить"
+                                                        >
+                                                            <TrashIcon className="w-5 h-5" />
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            type="button"
+                                                            disabled={!canEdit()}
+                                                            onClick={() => handleArchiveIncome(income.id)}
+                                                            className="p-2 rounded-lg text-orange-600 hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 disabled:pointer-events-none"
+                                                            title="Архивировать"
+                                                            aria-label="Архивировать"
+                                                        >
+                                                            <ArchiveBoxIcon className="w-5 h-5" />
+                                                        </button>
+                                                    )}
+                                                    {income.is_archive && canEdit() && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleUnarchiveIncome(income.id)}
+                                                            className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                                                            title="Разархивировать"
+                                                            aria-label="Разархивировать"
+                                                        >
+                                                            <ArchiveBoxArrowDownIcon className="w-5 h-5" />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ) : null
+                                ))
+                            )}
+                            </tbody>
+                        </table>
+                    </div>
+                    {totalCount > PAGE_SIZE && (
+                        <Pagination
+                            count={totalCount}
+                            pageSize={PAGE_SIZE}
+                            currentPage={currentPage}
+                            onPageChange={handlePageChange}
+                        />
+                    )}
+                </>
             )}
 
             {selectedIncome && (
