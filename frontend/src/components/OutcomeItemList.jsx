@@ -17,7 +17,9 @@ const OutcomeItemList = ({
         const fetchProducts = async () => {
             try {
                 const response = await getProducts();
-                const productMap = response.data.reduce((map, product) => {
+                const data = response.data?.results ?? response.data;
+                const list = Array.isArray(data) ? data : [];
+                const productMap = list.reduce((map, product) => {
                     map[product.id] = { name: product.name, kpi: product.kpi };
                     return map;
                 }, {});

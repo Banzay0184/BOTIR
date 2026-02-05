@@ -1,7 +1,7 @@
 import React, {useState} from "react";
 import {useNavigate} from "react-router-dom";
 import {Card, CardHeader, CardBody, CardFooter, Input, Button, Typography, IconButton} from "@material-tailwind/react";
-import AuthService from "../api/api.js";
+import AuthService, { getApiErrorMessage } from "../api/api.js";
 import {EyeIcon} from "@heroicons/react/24/solid/index.js";
 
 const LoginPage = ({onLogin}) => {
@@ -19,19 +19,14 @@ const LoginPage = ({onLogin}) => {
                 navigate("/home");
             },
             (error) => {
-                const errorResponse = error.response.data;
-                setErrors({
-                    username: errorResponse.username ? "Некорректное имя пользователя." : null,
-                    password: errorResponse.password ? "Некорректный пароль." : null,
-                    detail: errorResponse.detail ? "Неправильные учетные данные." : "Ошибка входа в систему."
-                });
+                setErrors({ detail: getApiErrorMessage(error) });
             }
         );
     };
 
     return (
-        <div className="flex items-center justify-center min-h-screen bg-gray-100">
-            <Card className="w-full max-w-sm">
+        <div className="flex items-center justify-center min-h-screen bg-gray-100 px-4 py-6 sm:px-6">
+            <Card className="w-full max-w-sm mx-auto">
                 <CardHeader
                     variant="gradient"
                     color="blue"

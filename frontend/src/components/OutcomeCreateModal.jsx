@@ -1,7 +1,7 @@
 import React, {useState, useEffect} from 'react';
 import Select from 'react-select';
 import {Dialog, DialogHeader, DialogBody, DialogFooter, Button, Input} from '@material-tailwind/react';
-import {createOutcome, getCompanies, getProducts} from '../api/api';
+import {createOutcome, getCompanies, getProducts, getApiErrorMessage} from '../api/api';
 import AddCompanyModal from './AddCompanyModal';
 
 const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarkings, setIncomes}) => {
@@ -52,7 +52,9 @@ const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarki
         const fetchProducts = async () => {
             try {
                 const response = await getProducts();
-                const productMap = response.data.reduce((map, product) => {
+                const data = response.data?.results ?? response.data;
+                const list = Array.isArray(data) ? data : [];
+                const productMap = list.reduce((map, product) => {
                     map[product.id] = product;
                     return map;
                 }, {});
@@ -156,8 +158,8 @@ const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarki
             setSelectedMarkings([]); // Сбрасываем выбранные markings
             onClose(); // Закрываем модальное окно
         } catch (error) {
-            console.error('Error creating outcome:', error.response?.data || error.message);
-            setError('Произошла ошибка при добавлении расхода.');
+            setError(getApiErrorMessage(error));
+            console.error('Error creating outcome:', error.response?.data ?? error.message);
         } finally {
             setIsSaving(false); // Окончание процесса сохранения
         }

@@ -13,7 +13,7 @@ import {
     Tooltip,
     Legend
 } from 'chart.js';
-import { getIncomes, getOutcomes } from '../api/api';
+import { getDashboardStats } from '../api/api';
 import { FaBoxes, FaMoneyBillWave } from 'react-icons/fa';  // Импорт иконок из React Icons
 
 ChartJS.register(
@@ -64,124 +64,49 @@ const DashboardPage = () => {
     const [currentStockValue, setCurrentStockValue] = useState(0);
 
     useEffect(() => {
-        const fetchIncomes = async () => {
+        const controller = new AbortController();
+        const fetchStats = async () => {
             try {
-                const response = await getIncomes();
-                const incomes = response.data;
+                const response = await getDashboardStats(selectedYear, controller.signal);
+                const data = response.data;
+                if (controller.signal.aborted) return;
 
-                const years = [...new Set(incomes.map(income => new Date(income.contract_date).getFullYear()))];
-                setAvailableYears(years.sort((a, b) => b - a));
+                setAvailableYears(data.available_years ?? []);
 
-                const monthlyData = Array(12).fill(0);
-                const monthlyAmounts = Array(12).fill(0);
-                let incomeSum = 0;
-                let incomeItemSum = 0;
+                const incomeByMonth = data.incomes?.by_month ?? Array.from({ length: 12 }, () => ({ items: 0, total: 0 }));
+                const outcomeByMonth = data.outcomes?.by_month ?? Array.from({ length: 12 }, () => ({ items: 0, total: 0 }));
 
-                incomes.forEach(income => {
-                    const incomeYear = new Date(income.contract_date).getFullYear();
-                    if (incomeYear === selectedYear) {
-                        const month = new Date(income.contract_date).getMonth();
-                        incomeSum += income.total;
-                        monthlyAmounts[month] += income.total;
-                        if (income.product_markings && Array.isArray(income.product_markings)) {
-                            monthlyData[month] += income.product_markings.length;
-                            incomeItemSum += income.product_markings.length;
-                        }
-                    }
-                });
-
-                setIncomeChartData(prevData => ({
-                    ...prevData,
+                setIncomeChartData(prev => ({
+                    ...prev,
                     datasets: [{
-                        ...prevData.datasets[0],
-                        data: monthlyData,
-                        totalAmounts: monthlyAmounts
-                    }]
+                        ...prev.datasets[0],
+                        data: incomeByMonth.map(m => m.items ?? 0),
+                        totalAmounts: incomeByMonth.map(m => m.total ?? 0),
+                    }],
+                }));
+                setOutcomeChartData(prev => ({
+                    ...prev,
+                    datasets: [{
+                        ...prev.datasets[0],
+                        data: outcomeByMonth.map(m => m.items ?? 0),
+                        totalAmounts: outcomeByMonth.map(m => m.total ?? 0),
+                    }],
                 }));
 
-                setTotalIncome(incomeSum);
-                setTotalIncomeItems(incomeItemSum);
+                setTotalIncome(data.incomes?.total_sum ?? 0);
+                setTotalIncomeItems(data.incomes?.total_items ?? 0);
+                setTotalOutcome(data.outcomes?.total_sum ?? 0);
+                setTotalOutcomeItems(data.outcomes?.total_items ?? 0);
+                setCurrentStockItems(data.stock?.items_count ?? 0);
+                setCurrentStockValue(data.stock?.value ?? 0);
             } catch (error) {
-                console.error('Ошибка при получении доходов:', error);
+                if (controller.signal.aborted) return;
+                console.error('Ошибка при получении статистики дашборда:', error);
             }
         };
 
-        const fetchOutcomes = async () => {
-            try {
-                const response = await getOutcomes();
-                const outcomes = response.data;
-
-                const monthlyData = Array(12).fill(0);
-                const monthlyAmounts = Array(12).fill(0);
-                let outcomeSum = 0;
-                let outcomeItemSum = 0;
-
-                outcomes.forEach(outcome => {
-                    const outcomeYear = new Date(outcome.contract_date).getFullYear();
-                    if (outcomeYear === selectedYear) {
-                        const month = new Date(outcome.contract_date).getMonth();
-                        outcomeSum += outcome.total;
-                        monthlyAmounts[month] += outcome.total;
-                        if (outcome.product_markings && Array.isArray(outcome.product_markings)) {
-                            monthlyData[month] += outcome.product_markings.length;
-                            outcomeItemSum += outcome.product_markings.length;
-                        }
-                    }
-                });
-
-                setOutcomeChartData(prevData => ({
-                    ...prevData,
-                    datasets: [{
-                        ...prevData.datasets[0],
-                        data: monthlyData,
-                        totalAmounts: monthlyAmounts
-                    }]
-                }));
-
-                setTotalOutcome(outcomeSum);
-                setTotalOutcomeItems(outcomeItemSum);
-            } catch (error) {
-                console.error('Ошибка при получении расходов:', error);
-            }
-        };
-
-        const calculateCurrentStock = async () => {
-            try {
-                const incomeResponse = await getIncomes();
-                const outcomeResponse = await getOutcomes();
-                const incomes = incomeResponse.data;
-                const outcomes = outcomeResponse.data;
-
-                let incomeItemSum = 0;
-                let outcomeItemSum = 0;
-                let incomeSum = 0;
-                let outcomeSum = 0;
-
-                incomes.forEach(income => {
-                    incomeSum += income.total;
-                    if (income.product_markings && Array.isArray(income.product_markings)) {
-                        incomeItemSum += income.product_markings.length;
-                    }
-                });
-
-                outcomes.forEach(outcome => {
-                    outcomeSum += outcome.total;
-                    if (outcome.product_markings && Array.isArray(outcome.product_markings)) {
-                        outcomeItemSum += outcome.product_markings.length;
-                    }
-                });
-
-                setCurrentStockItems(incomeItemSum - outcomeItemSum);
-                setCurrentStockValue(incomeSum - outcomeSum);
-
-            } catch (error) {
-                console.error('Ошибка при вычислении текущего состояния склада:', error);
-            }
-        };
-
-        fetchIncomes();
-        fetchOutcomes();
-        calculateCurrentStock();
+        fetchStats();
+        return () => controller.abort();
     }, [selectedYear]);
 
     const barChartOptions = {
@@ -254,12 +179,12 @@ const DashboardPage = () => {
     };
 
     return (
-        <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-100">
+        <div className="p-3 sm:p-4 md:p-6 grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 bg-gray-100 min-w-0">
             {/* Текущие данные о товарах и общей сумме на складе */}
             <Card className="col-span-2 shadow-xl rounded-lg border border-gray-300 p-6 bg-gradient-to-r from-indigo-500 to-indigo-700 text-white">
                 <CardBody>
                     <Typography variant="h5" className="text-center font-bold mb-4">Текущие данные о складе</Typography>
-                    <div className="flex justify-around">
+                    <div className="flex flex-col sm:flex-row justify-around gap-4 sm:gap-0">
                         <div className="flex flex-col items-center">
                             <div className="bg-white p-3 rounded-full shadow-lg mb-2">
                                 <FaBoxes className="w-6 h-6 text-indigo-700" />
@@ -298,7 +223,7 @@ const DashboardPage = () => {
                     <Typography variant="h6" color="white">Годовой график получения товаров по месяцам</Typography>
                 </CardHeader>
                 <CardBody>
-                    <div style={{ height: '400px' }}>
+                    <div className="h-[280px] sm:h-[320px] md:h-[400px] min-h-0">
                         <Bar data={incomeChartData} options={barChartOptions} />
                         <Typography variant="h6" color="gray" className="mt-4 text-sm">Общая сумма доходов</Typography>
                         <Typography variant="h4" color="green" className="mt-2 text-xl font-medium">{totalIncome.toLocaleString()} сум</Typography>
@@ -314,7 +239,7 @@ const DashboardPage = () => {
                     <Typography variant="h6" color="white">Годовой график отгрузки товаров по месяцам</Typography>
                 </CardHeader>
                 <CardBody>
-                    <div style={{ height: '400px' }}>
+                    <div className="h-[280px] sm:h-[320px] md:h-[400px] min-h-0">
                         <Bar data={outcomeChartData} options={barChartOptions} />
                         <Typography variant="h6" color="gray" className="mt-4 text-sm">Общая сумма расходов</Typography>
                         <Typography variant="h4" color="red" className="mt-2 text-xl font-medium">{totalOutcome.toLocaleString()} сум</Typography>

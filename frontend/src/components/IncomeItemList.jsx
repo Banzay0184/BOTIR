@@ -1,6 +1,6 @@
 import React, {useState, useEffect} from 'react';
 import {Typography} from '@material-tailwind/react';
-import {updateMarking, deleteMarking, getProducts} from '../api/api';
+import {updateMarking, deleteMarking, getProducts, canEdit} from '../api/api';
 import MarkingEditModal from './MarkingEditModal.jsx';
 
 const IncomeItemList = ({
@@ -22,7 +22,9 @@ const IncomeItemList = ({
         const fetchProducts = async () => {
             try {
                 const response = await getProducts();
-                const productMap = response.data.reduce((map, product) => {
+                const data = response.data?.results ?? response.data;
+                const list = Array.isArray(data) ? data : [];
+                const productMap = list.reduce((map, product) => {
                     map[product.id] = {name: product.name, kpi: product.kpi};
                     return map;
                 }, {});
@@ -232,9 +234,7 @@ const IncomeItemList = ({
                     </td>
                     <td className="p-4">
                         <button
-                            disabled={
-                                currentUser.position === 'Бухгалтер' || currentUser.position === 'Директор' || currentUser.position === 'Учредитель'
-                            }
+                            disabled={!canEdit()}
                             onClick={() => openModal(marking)}
                         >
                             <svg
@@ -253,9 +253,7 @@ const IncomeItemList = ({
                             </svg>
                         </button>
                         <button
-                            disabled={
-                                currentUser.position === 'Бухгалтер' || currentUser.position === 'Директор' || currentUser.position === 'Учредитель'
-                            }
+                            disabled={!canEdit()}
                             onClick={() => openDeleteModal(marking)}
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"

@@ -33,12 +33,17 @@ class Product(models.Model):
 class ProductMarking(models.Model):
     marking = models.CharField(max_length=255, unique=True)
     counter = models.BooleanField(default=False, null=True, blank=True)
-    income = models.ForeignKey("Income", on_delete=models.CASCADE, related_name="income", null=True,
-                               blank=True)
-    outcome = models.ForeignKey("Outcome", on_delete=models.PROTECT, related_name="product_markings", null=True,
-                                blank=True)
-    product = models.ForeignKey("Product", on_delete=models.CASCADE, related_name="product", null=True,
-                                blank=True)
+    income = models.ForeignKey(
+        "Income", on_delete=models.CASCADE, related_name="income", null=True, blank=True
+    )
+    outcome = models.ForeignKey(
+        "Outcome", on_delete=models.PROTECT, related_name="product_markings", null=True, blank=True, db_index=True
+    )
+    product = models.ForeignKey(
+        "Product", on_delete=models.CASCADE, related_name="product", null=True, blank=True, db_index=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
 
     def __str__(self):
         return self.marking
@@ -47,13 +52,20 @@ class ProductMarking(models.Model):
 class Income(models.Model):
     added_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True)
     from_company = models.ForeignKey(Company, related_name="from_company", on_delete=models.CASCADE)
-    contract_date = models.DateField()
+    contract_date = models.DateField(db_index=True)
     contract_number = models.CharField(max_length=255)
-    invoice_date = models.DateField()
+    invoice_date = models.DateField(db_index=True)
     invoice_number = models.CharField(max_length=255)
     unit_of_measure = models.CharField(max_length=255)
     total = models.FloatField()
-    is_archive = models.BooleanField(default=True)
+    is_archive = models.BooleanField(default=False, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+    archived_by = models.ForeignKey(
+        CustomUser, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="archived_incomes",
+    )
 
     def __str__(self):
         return self.contract_number
@@ -62,13 +74,20 @@ class Income(models.Model):
 class Outcome(models.Model):
     added_by = models.ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True)
     to_company = models.ForeignKey(Company, on_delete=models.CASCADE, related_name="to_company")
-    contract_date = models.DateField()
+    contract_date = models.DateField(db_index=True)
     contract_number = models.CharField(max_length=255)
-    invoice_date = models.DateField()
+    invoice_date = models.DateField(db_index=True)
     invoice_number = models.CharField(max_length=255)
     unit_of_measure = models.CharField(max_length=255)
     total = models.FloatField()
-    is_archive = models.BooleanField(default=False)
+    is_archive = models.BooleanField(default=False, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True, null=True, blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+    archived_by = models.ForeignKey(
+        CustomUser, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="archived_outcomes",
+    )
 
     def __str__(self):
         return self.contract_number

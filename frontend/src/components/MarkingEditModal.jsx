@@ -1,5 +1,6 @@
 import React, {useState, useEffect} from 'react';
 import {Dialog, DialogHeader, DialogBody, DialogFooter, Button, Input} from '@material-tailwind/react';
+import {getApiErrorMessage} from '../api/api';
 
 const MarkingEditModal = ({isOpen, onClose, marking, onSave, onDelete}) => {
     const [newMarking, setNewMarking] = useState('');
@@ -25,12 +26,7 @@ const MarkingEditModal = ({isOpen, onClose, marking, onSave, onDelete}) => {
                 await onSave(marking.id, newMarking, newMarkingCounter);
                 onClose(); // Закрываем только если не было ошибок
             } catch (error) {
-                if (error.response && error.response.data && error.response.data.marking) {
-                    setError('Маркировка должна быть уникальной.');
-
-                } else {
-                    setError('Произошла ошибка при сохранении маркировки.');
-                }
+                setError(getApiErrorMessage(error));
             }
         }
     };

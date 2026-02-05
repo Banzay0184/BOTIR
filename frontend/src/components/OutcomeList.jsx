@@ -18,7 +18,8 @@ export default function OutcomeList() {
             try {
                 setIsLoading(true); // Устанавливаем состояние загрузки в true перед запросом
                 const response = await getOutcomes();
-                setOutcomes(response.data);
+                const data = response.data?.results ?? response.data;
+                setOutcomes(Array.isArray(data) ? data : []);
             } catch (error) {
                 console.error('Failed to fetch outcomes:', error);
             } finally {
@@ -35,15 +36,15 @@ export default function OutcomeList() {
 
     return (
         <>
-            <Card className="snap-y h-[100vh] w-full overflow-scroll">
-                <div className="p-4">
-                    <div className="space-x-4">
+            <Card className="w-full min-h-0 overflow-hidden flex flex-col">
+                <div className="p-3 sm:p-4 shrink-0">
+                    <div className="flex flex-wrap gap-2">
                         <input
                             type="text"
                             placeholder="Поиск..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="p-2 border rounded w-1/3"
+                            className="p-2 border rounded w-full sm:w-48 md:w-64 min-w-0"
                         />
                     </div>
                     <Typography variant="small" color="blue-gray" className="font-normal mt-4">
@@ -57,7 +58,8 @@ export default function OutcomeList() {
                             className="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mb-4"></div>
                     </div>
                 ) : (  // Отображаем данные, когда загрузка завершена
-                    <table className="w-full min-w-max table-auto text-left">
+                    <div className="overflow-x-auto flex-1 min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
+                    <table className="w-full min-w-[600px] table-auto text-left">
                         <thead>
                         <tr>
                             {TABLE_HEAD.map((head) => (
@@ -84,6 +86,7 @@ export default function OutcomeList() {
                         />
                         </tbody>
                     </table>
+                    </div>
                 )}
             </Card>
         </>

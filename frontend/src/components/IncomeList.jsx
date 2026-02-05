@@ -3,7 +3,7 @@ import {Card, Typography, Button} from "@material-tailwind/react";
 import IncomeItemList from "./IncomeItemList.jsx";
 import AddIncomeModal from './AddIncomeModal.jsx';
 import OutcomeCreateModal from './OutcomeCreateModal.jsx';
-import {getIncomes} from '../api/api';
+import {getIncomes, canEdit} from '../api/api';
 
 const TABLE_HEAD = ["ID", "Название товара", "Единица измерения", "ИКПУ", "Маркировка", "Действия"];
 
@@ -17,19 +17,24 @@ export default function IncomeList({currentUser}) {
     const [isLoading, setIsLoading] = useState(true); // Состояние загрузки
 
     useEffect(() => {
+        const controller = new AbortController();
         const fetchIncomes = async () => {
             try {
-                setIsLoading(true); // Устанавливаем состояние загрузки в true
-                const response = await getIncomes();
-                setIncomes(response.data);
+                setIsLoading(true);
+                const response = await getIncomes(controller.signal);
+                if (controller.signal.aborted) return;
+                const data = response.data?.results ?? response.data;
+                setIncomes(Array.isArray(data) ? data : []);
             } catch (error) {
+                if (controller.signal.aborted) return;
                 console.error('Failed to fetch incomes:', error);
             } finally {
-                setIsLoading(false); // Устанавливаем состояние загрузки в false после получения данных
+                if (!controller.signal.aborted) setIsLoading(false);
             }
         };
 
         fetchIncomes();
+        return () => controller.abort();
     }, []);
 
     const handleUpdateMarkingCount = (count) => {
@@ -55,18 +60,18 @@ export default function IncomeList({currentUser}) {
 
     return (
         <>
-            <Card className="snap-y h-[100vh] w-full overflow-scroll">
-                <div className="p-4">
-                    <div className="space-x-4">
+            <Card className="w-full min-h-0 overflow-hidden flex flex-col">
+                <div className="p-3 sm:p-4 shrink-0">
+                    <div className="flex flex-wrap gap-2 sm:gap-4 items-center">
                         <input
                             type="text"
                             placeholder="Поиск..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="p-2 border rounded w-4/12"
+                            className="p-2 border rounded w-full sm:w-48 md:w-64 min-w-0"
                         />
                         <Button
-                            disabled={currentUser.position === 'Директор' || currentUser.position === 'Учредитель'}
+                            disabled={!canEdit()}
                             color='blue'
                             onClick={toggleModal}
                         >
@@ -75,7 +80,7 @@ export default function IncomeList({currentUser}) {
                         <Button
                             color='red'
                             onClick={() => setOutcomeModalOpen(true)}
-                            disabled={selectedMarkings.length === 0 || currentUser.position === 'Директор' || currentUser.position === 'Учредитель'}
+                            disabled={selectedMarkings.length === 0 || !canEdit()}
                         >
                             Расход ({selectedMarkings.length})
                         </Button>
@@ -91,11 +96,12 @@ export default function IncomeList({currentUser}) {
                             className="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mb-4"></div>
                     </div>
                 ) : (  // Показываем данные после загрузки
-                    <table className="w-full min-w-max table-auto text-left">
+                    <div className="overflow-x-auto flex-1 min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
+                    <table className="w-full min-w-[600px] table-auto text-left">
                         <thead>
                         <tr>
                             {TABLE_HEAD.map((head) => (
-                                <th key={head} className="border-b border-blue-gray-100 bg-blue-gray-50 p-4">
+                                <th key={head} className="border-b border-blue-gray-100 bg-blue-gray-50 p-2 sm:p-4">
                                     <Typography
                                         variant="small"
                                         color="blue-gray"
@@ -119,6 +125,7 @@ export default function IncomeList({currentUser}) {
                         />
                         </tbody>
                     </table>
+                    </div>
                 )}
             </Card>
 

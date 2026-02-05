@@ -1,6 +1,6 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {Dialog, DialogHeader, DialogBody, DialogFooter, Button, Input} from '@material-tailwind/react';
-import {createCompany} from '../api/api'; // Проверьте путь к вашему API
+import {createCompany, getApiErrorMessage} from '../api/api';
 
 const AddCompanyModal = ({isOpen, onClose, onAddCompany}) => {
     const [formData, setFormData] = useState({
@@ -8,6 +8,11 @@ const AddCompanyModal = ({isOpen, onClose, onAddCompany}) => {
         phone: '',
         inn: '',
     });
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        if (isOpen) setError('');
+    }, [isOpen]);
 
     const handleChange = (e) => {
         const {name, value} = e.target;
@@ -19,12 +24,14 @@ const AddCompanyModal = ({isOpen, onClose, onAddCompany}) => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setError('');
         try {
             const response = await createCompany(formData);
             onAddCompany(response.data);
             onClose();
-        } catch (error) {
-            console.error('Error adding company:', error.response?.data || error.message);
+        } catch (err) {
+            setError(getApiErrorMessage(err));
+            console.error('Error adding company:', err.response?.data ?? err.message);
         }
     };
 
@@ -33,6 +40,7 @@ const AddCompanyModal = ({isOpen, onClose, onAddCompany}) => {
             <DialogHeader>Добавить новую компанию</DialogHeader>
             <DialogBody>
                 <form onSubmit={handleSubmit} className="space-y-4">
+                    {error && <p className="text-red-500 text-sm">{error}</p>}
                     <div className="mb-4">
                         <Input
                             type="text"

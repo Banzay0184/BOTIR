@@ -1,42 +1,55 @@
-import React, {useState, useEffect} from 'react';
-import {getOutcomes, deleteOutcome} from '../api/api'; // Убедитесь, что функция deleteOutcome правильно определена в вашем API файле
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { getOutcomes, deleteOutcome, archiveOutcome, unarchiveOutcome, canEdit } from '../api/api';
 import OutcomeDetails from './OutcomeDetails';
-import {Button, Input, Dialog, DialogHeader, DialogBody, DialogFooter} from '@material-tailwind/react';
+import { Button, Input, Dialog, DialogHeader, DialogBody, DialogFooter } from '@material-tailwind/react';
 import EditOutcomeModal from './EditOutcomeModal';
+import {
+    EyeIcon,
+    PencilSquareIcon,
+    TrashIcon,
+    ArchiveBoxIcon,
+    ArchiveBoxArrowDownIcon,
+} from '@heroicons/react/24/outline';
 
-const OutcomeDocument = ({currentUser}) => {
+const OutcomeDocument = ({ currentUser }) => {
+    const navigate = useNavigate();
     const [outcomes, setOutcomes] = useState([]);
     const [filteredOutcomes, setFilteredOutcomes] = useState([]);
     const [selectedOutcome, setSelectedOutcome] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-    const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false); // Состояние для управления модальным окном подтверждения удаления
-    const [outcomeToDelete, setOutcomeToDelete] = useState(null); // Состояние для хранения удаляемого расхода
+    const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
+    const [outcomeToDelete, setOutcomeToDelete] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [isLoading, setIsLoading] = useState(true); // Добавляем состояние загрузки
 
     useEffect(() => {
+        const controller = new AbortController();
         const fetchOutcomes = async () => {
             try {
-                setIsLoading(true); // Устанавливаем состояние загрузки
-                const response = await getOutcomes();
-                if (response.data && Array.isArray(response.data)) {
-                    const sortedData = response.data.reverse();
+                setIsLoading(true);
+                const response = await getOutcomes({ is_archive: false }, controller.signal);
+                if (controller.signal.aborted) return;
+                const data = response.data?.results ?? response.data;
+                if (Array.isArray(data)) {
+                    const sortedData = [...data].reverse();
                     setOutcomes(sortedData);
                     setFilteredOutcomes(sortedData);
                 } else {
                     console.error('Invalid response data:', response.data);
                 }
             } catch (error) {
-                console.error('Error fetching outcomes:', error);
+                if (!controller.signal.aborted) console.error('Error fetching outcomes:', error);
             } finally {
-                setIsLoading(false); // Завершаем состояние загрузки
+                if (!controller.signal.aborted) setIsLoading(false);
             }
         };
 
         fetchOutcomes();
+        return () => controller.abort();
     }, []);
 
     useEffect(() => {
@@ -107,6 +120,26 @@ const OutcomeDocument = ({currentUser}) => {
         setIsConfirmDeleteOpen(true);
     };
 
+    const handleArchiveOutcome = async (outcomeId) => {
+        try {
+            await archiveOutcome(outcomeId);
+            setOutcomes(prev => prev.filter(o => o.id !== outcomeId));
+            setFilteredOutcomes(prev => prev.filter(o => o.id !== outcomeId));
+        } catch (error) {
+            console.error('Ошибка при архивации:', error);
+        }
+    };
+
+    const handleUnarchiveOutcome = async (outcomeId) => {
+        try {
+            await unarchiveOutcome(outcomeId);
+            setOutcomes(prev => prev.filter(o => o.id !== outcomeId));
+            setFilteredOutcomes(prev => prev.filter(o => o.id !== outcomeId));
+        } catch (error) {
+            console.error('Ошибка при разархивации:', error);
+        }
+    };
+
     const handleDeleteOutcome = async () => {
         try {
             await deleteOutcome(outcomeToDelete); // Удаляем расход
@@ -119,28 +152,40 @@ const OutcomeDocument = ({currentUser}) => {
     };
 
     return (
-        <div className="p-4 h-[100vh] w-full overflow-scroll">
-            <h2 className="text-xl font-bold mb-4">Список расходов</h2>
-            <div className="mb-4 flex space-x-4">
-                <Input
-                    type="text"
-                    label="Поиск"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Поиск по компании, дате контракта, номеру контракта и т.д."
-                />
-                <Input
-                    type="date"
-                    label="Дата начала"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                />
-                <Input
-                    type="date"
-                    label="Дата окончания"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                />
+        <div className="p-3 sm:p-4 w-full min-w-0 overflow-auto">
+            <h2 className="text-lg sm:text-xl font-bold mb-4">Список расходов</h2>
+            <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+                <div className="min-w-0 w-full">
+                    <Input
+                        type="text"
+                        label="Поиск"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="Компания, контракт, счёт..."
+                        className="!min-w-0"
+                        containerProps={{ className: 'min-w-0' }}
+                    />
+                </div>
+                <div className="min-w-0 w-full">
+                    <Input
+                        type="date"
+                        label="Дата начала"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className="!min-w-0"
+                        containerProps={{ className: 'min-w-0' }}
+                    />
+                </div>
+                <div className="min-w-0 w-full">
+                    <Input
+                        type="date"
+                        label="Дата окончания"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className="!min-w-0"
+                        containerProps={{ className: 'min-w-0' }}
+                    />
+                </div>
             </div>
 
             {isLoading ? (  // Отображаем анимацию загрузки, если данные загружаются
@@ -148,53 +193,92 @@ const OutcomeDocument = ({currentUser}) => {
                     <div className="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mb-4"></div>
                 </div>
             ) : (  // Отображаем данные, если загрузка завершена
-                <table className="min-w-full bg-white border">
+                <div className="overflow-x-auto -mx-3 sm:-mx-4" style={{ WebkitOverflowScrolling: 'touch' }}>
+                <table className="min-w-[640px] w-full bg-white border">
                     <thead>
                     <tr>
-                        <th className="py-2 px-4 border">Компания</th>
-                        <th className="py-2 px-4 border">Дата контракта</th>
-                        <th className="py-2 px-4 border">Номер контракта</th>
-                        <th className="py-2 px-4 border">Дата счета</th>
-                        <th className="py-2 px-4 border">Номер счета</th>
-                        <th className="py-2 px-4 border">Общая сумма</th>
-                        <th className="py-2 px-4 border">Действия</th>
+                        <th className="py-2 px-2 sm:px-4 border text-left text-sm">Компания</th>
+                        <th className="py-2 px-2 sm:px-4 border text-left text-sm">Дата контракта</th>
+                        <th className="py-2 px-2 sm:px-4 border text-left text-sm">Номер контракта</th>
+                        <th className="py-2 px-2 sm:px-4 border text-left text-sm">Дата счета</th>
+                        <th className="py-2 px-2 sm:px-4 border text-left text-sm">Номер счета</th>
+                        <th className="py-2 px-2 sm:px-4 border text-left text-sm">Общая сумма</th>
+                        <th className="py-2 px-2 sm:px-4 border text-left text-sm whitespace-nowrap">Действия</th>
                     </tr>
                     </thead>
                     <tbody>
                     {filteredOutcomes.map((outcome) => (
                         outcome && outcome.id ? (
                             <tr key={outcome.id} className="border-b">
-                                <td className="py-2 px-4 border">{outcome.to_company?.name}</td>
-                                <td className="py-2 px-4 border">{outcome.contract_date}</td>
-                                <td className="py-2 px-4 border">{outcome.contract_number}</td>
-                                <td className="py-2 px-4 border">{outcome.invoice_date}</td>
-                                <td className="py-2 px-4 border">{outcome.invoice_number}</td>
-                                <td className="py-2 px-4 border">{outcome.total.toLocaleString()} сум.</td>
-                                <td className="py-2 px-4 border flex flex-col gap-2">
-                                    <Button size="sm" color="blue" onClick={() => handleViewDetails(outcome)}>
-                                        Просмотр
-                                    </Button>
-                                    <Button
-                                        disabled={currentUser.position === 'Бухгалтер' || currentUser.position === 'Директор' || currentUser.position === 'Учредитель'}
-                                        size="sm"
-                                        color="green"
-                                        onClick={() => handleEditOutcome(outcome)}>
-                                        Редактировать
-                                    </Button>
-                                    <Button
-                                        disabled={currentUser.position === 'Бухгалтер' || currentUser.position === 'Директор' || currentUser.position === 'Учредитель'}
-                                        size="sm"
-                                        color="red"
-                                        onClick={() => openConfirmDeleteModal(outcome.id)} // Открываем модальное окно подтверждения удаления
-                                    >
-                                        Удалить
-                                    </Button>
+                                <td className="py-2 px-2 sm:px-4 border text-sm truncate max-w-[120px] sm:max-w-none">{outcome.to_company?.name}</td>
+                                <td className="py-2 px-2 sm:px-4 border text-sm whitespace-nowrap">{outcome.contract_date}</td>
+                                <td className="py-2 px-2 sm:px-4 border text-sm truncate max-w-[100px] sm:max-w-none">{outcome.contract_number}</td>
+                                <td className="py-2 px-2 sm:px-4 border text-sm whitespace-nowrap">{outcome.invoice_date}</td>
+                                <td className="py-2 px-2 sm:px-4 border text-sm truncate max-w-[100px] sm:max-w-none">{outcome.invoice_number}</td>
+                                <td className="py-2 px-2 sm:px-4 border text-sm whitespace-nowrap">{outcome.total.toLocaleString()} сум.</td>
+                                <td className="py-2 px-2 sm:px-4 border">
+                                    <div className="flex flex-col sm:flex-row flex-wrap gap-1 sm:gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleViewDetails(outcome)}
+                                            className="p-2 rounded-lg text-blue-600 hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            title="Просмотр"
+                                            aria-label="Просмотр"
+                                        >
+                                            <EyeIcon className="w-5 h-5" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={!canEdit()}
+                                            onClick={() => handleEditOutcome(outcome)}
+                                            className="p-2 rounded-lg text-green-600 hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:pointer-events-none"
+                                            title="Редактировать"
+                                            aria-label="Редактировать"
+                                        >
+                                            <PencilSquareIcon className="w-5 h-5" />
+                                        </button>
+                                        {outcome.is_archive ? (
+                                            <button
+                                                type="button"
+                                                disabled={!canEdit()}
+                                                onClick={() => openConfirmDeleteModal(outcome.id)}
+                                                className="p-2 rounded-lg text-red-600 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 disabled:pointer-events-none"
+                                                title="Удалить"
+                                                aria-label="Удалить"
+                                            >
+                                                <TrashIcon className="w-5 h-5" />
+                                            </button>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                disabled={!canEdit()}
+                                                onClick={() => handleArchiveOutcome(outcome.id)}
+                                                className="p-2 rounded-lg text-orange-600 hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 disabled:pointer-events-none"
+                                                title="Архивировать"
+                                                aria-label="Архивировать"
+                                            >
+                                                <ArchiveBoxIcon className="w-5 h-5" />
+                                            </button>
+                                        )}
+                                        {outcome.is_archive && canEdit() && (
+                                            <button
+                                                type="button"
+                                                onClick={() => handleUnarchiveOutcome(outcome.id)}
+                                                className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                                                title="Разархивировать"
+                                                aria-label="Разархивировать"
+                                            >
+                                                <ArchiveBoxArrowDownIcon className="w-5 h-5" />
+                                            </button>
+                                        )}
+                                    </div>
                                 </td>
                             </tr>
                         ) : null
                     ))}
                     </tbody>
                 </table>
+                </div>
             )}
 
             {/* Модальное окно подтверждения удаления */}
@@ -227,6 +311,10 @@ const OutcomeDocument = ({currentUser}) => {
                     isOpen={isModalOpen}
                     onClose={handleCloseModal}
                     outcome={selectedOutcome}
+                    onShowDocument={(outcome) => {
+                        handleCloseModal();
+                        navigate(`/outcomedocument/${outcome.id}`);
+                    }}
                 />
             )}
             {selectedOutcome && (

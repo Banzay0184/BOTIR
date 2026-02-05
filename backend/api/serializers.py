@@ -1,9 +1,11 @@
 # serializers.py
-from django.contrib.auth.models import User
+from django.contrib.auth.models import User, Group
+from django.contrib.auth.password_validation import validate_password
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 from django.db import transaction
+from django.contrib.auth import get_user_model
 from warehouse.models import Company, Product, ProductMarking, Income, Outcome, CustomUser
 
 
@@ -13,6 +15,63 @@ class CustomUserSerializer(serializers.ModelSerializer):
         fields = ('id', 'username', 'email', 'position', 'phone')
 
 
+class AdminUserListSerializer(serializers.ModelSerializer):
+    groups = serializers.SlugRelatedField(many=True, slug_field='name', read_only=True)
+
+    class Meta:
+        model = CustomUser
+        fields = (
+            'id', 'username', 'email', 'first_name', 'last_name',
+            'phone', 'position', 'is_active', 'groups',
+        )
+
+
+class AdminUserCreateSerializer(serializers.ModelSerializer):
+    groups = serializers.PrimaryKeyRelatedField(many=True, queryset=Group.objects.all(), required=False)
+    password = serializers.CharField(write_only=True, min_length=1)
+
+    class Meta:
+        model = CustomUser
+        fields = (
+            'username', 'email', 'password', 'first_name', 'last_name',
+            'phone', 'position', 'groups',
+        )
+
+    def create(self, validated_data):
+        groups = validated_data.pop('groups', [])
+        password = validated_data.pop('password')
+        user = get_user_model().objects.create_user(
+            password=password,
+            **validated_data,
+        )
+        if groups:
+            user.groups.set(groups)
+        return user
+
+
+class AdminUserUpdateSerializer(serializers.ModelSerializer):
+    groups = serializers.PrimaryKeyRelatedField(many=True, queryset=Group.objects.all(), required=False)
+
+    class Meta:
+        model = CustomUser
+        fields = ('first_name', 'last_name', 'phone', 'position', 'groups', 'is_active')
+
+    def update(self, instance, validated_data):
+        groups = validated_data.pop('groups', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if groups is not None:
+            instance.groups.set(groups)
+        return instance
+
+
+class GroupSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Group
+        fields = ('id', 'name')
+
+
 class CompanySerializer(serializers.ModelSerializer):
     class Meta:
         model = Company
@@ -20,15 +79,34 @@ class CompanySerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
+    stock = serializers.IntegerField(read_only=True)
+
     class Meta:
         model = Product
         fields = '__all__'
 
 
 class ProductMarkingSerializer(serializers.ModelSerializer):
+    product_name = serializers.SerializerMethodField()
+    product_kpi = serializers.SerializerMethodField()
+    product_price = serializers.SerializerMethodField()
+
     class Meta:
         model = ProductMarking
-        fields = '__all__'
+        fields = [
+            'id', 'marking', 'counter', 'income', 'outcome', 'product',
+            'product_name', 'product_kpi', 'product_price',
+            'created_at', 'updated_at',
+        ]
+
+    def get_product_name(self, obj):
+        return obj.product.name if obj.product_id else None
+
+    def get_product_kpi(self, obj):
+        return obj.product.kpi if obj.product_id else None
+
+    def get_product_price(self, obj):
+        return obj.product.price if obj.product_id else None
 
 
 class IncomeSerializer(serializers.ModelSerializer):
@@ -41,19 +119,12 @@ class IncomeSerializer(serializers.ModelSerializer):
         model = Income
         fields = '__all__'
 
-    def to_representation(self, instance):
-        representation = super().to_representation(instance)
-        print()
-        representation['product_markings'] = ProductMarkingSerializer(instance.income, many=True).data
-        return representation
-
     def get_product_markings(self, obj):
         product_markings = ProductMarking.objects.filter(income=obj)
         return ProductMarkingSerializer(product_markings, many=True).data
 
     @transaction.atomic
     def create(self, validated_data):
-        print(validated_data)
         company_data = validated_data.pop('from_company')
         products_data = validated_data.pop('products')
         user = self.context['request'].user  # Получаем текущего пользователя
@@ -82,11 +153,16 @@ class IncomeSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def update(self, instance, validated_data):
-        company_data = validated_data.pop('from_company')
+        if instance.is_archive:
+            raise ValidationError(
+                {'is_archive': 'Редактирование архивного документа прихода запрещено.'}
+            )
+        company_data = validated_data.pop('from_company', None)
         products_data = validated_data.pop('products', None)
 
-        company, created = Company.objects.get_or_create(**company_data)
-        instance.from_company = company
+        if company_data is not None:
+            company, created = Company.objects.get_or_create(**company_data)
+            instance.from_company = company
         instance.contract_date = validated_data.get('contract_date', instance.contract_date)
         instance.contract_number = validated_data.get('contract_number', instance.contract_number)
         instance.invoice_date = validated_data.get('invoice_date', instance.invoice_date)
@@ -101,7 +177,13 @@ class IncomeSerializer(serializers.ModelSerializer):
             new_markings = {marking['marking'] for product in products_data for marking in product.get('markings', [])}
 
             markings_to_delete = existing_markings - new_markings
-            ProductMarking.objects.filter(income=instance, marking__in=markings_to_delete).delete()
+            if markings_to_delete:
+                to_delete_qs = ProductMarking.objects.filter(income=instance, marking__in=markings_to_delete)
+                if to_delete_qs.filter(outcome__isnull=False).exists():
+                    raise ValidationError({
+                        'products': ['Нельзя удалить или убрать из документа списанные маркировки.']
+                    })
+                to_delete_qs.delete()
 
             for product_data in products_data:
                 markings_data = product_data.pop('markings', [])
@@ -110,7 +192,9 @@ class IncomeSerializer(serializers.ModelSerializer):
 
                 for marking_data in markings_data:
                     marking_value = marking_data.get('marking')
-
+                    # Уже есть на этом приходе (оставили в списке) — не создаём повторно
+                    if ProductMarking.objects.filter(marking=marking_value, income=instance).exists():
+                        continue
                     if ProductMarking.objects.filter(marking=marking_value).exists():
                         raise ValidationError(f'Маркировка "{marking_value}" уже существует.')
 
@@ -140,7 +224,19 @@ class OutcomeSerializer(serializers.ModelSerializer):
             'total',
             'is_archive',
             'added_by',
+            'created_at', 'updated_at', 'archived_at', 'archived_by',
         )
+
+    def _validate_markings_not_already_written_off(self, product_markings_data, instance=None):
+        """Правило №1: маркировку нельзя списать дважды. При update разрешаем маркировки этого outcome."""
+        already_used = [
+            m.marking for m in product_markings_data
+            if m.outcome_id is not None and (instance is None or m.outcome_id != instance.id)
+        ]
+        if already_used:
+            raise ValidationError({
+                'product_markings': [f'Маркировка уже списана: {m}' for m in already_used[:10]]
+            })
 
     @transaction.atomic
     def create(self, validated_data):
@@ -150,17 +246,32 @@ class OutcomeSerializer(serializers.ModelSerializer):
         company_data = validated_data.pop('to_company')
         product_markings_data = validated_data.pop('product_markings')
 
+        self._validate_markings_not_already_written_off(product_markings_data)
+
         company, created = Company.objects.get_or_create(**company_data)
         outcome = Outcome.objects.create(to_company=company, added_by=user, **validated_data)
 
-        for marking in product_markings_data:
-            marking.outcome = outcome
-            marking.save()
+        # Защита от гонок: атомарный bulk update только по маркировкам с outcome__isnull=True,
+        # проверка числа обновлённых строк — при параллельных запросах один получит updated < len.
+        marking_ids = [m.id for m in product_markings_data]
+        updated = ProductMarking.objects.filter(
+            id__in=marking_ids, outcome__isnull=True
+        ).update(outcome=outcome)
+        if updated != len(marking_ids):
+            raise ValidationError({
+                'product_markings': [
+                    'Часть маркировок уже привязана к другому расходу. Обновите страницу и попробуйте снова.'
+                ]
+            })
 
         return outcome
 
     @transaction.atomic
     def update(self, instance, validated_data):
+        if instance.is_archive:
+            raise ValidationError(
+                {'is_archive': 'Редактирование архивного документа расхода запрещено.'}
+            )
         company_data = validated_data.pop('to_company')
         product_markings_data = validated_data.pop('product_markings', None)
 
@@ -175,11 +286,21 @@ class OutcomeSerializer(serializers.ModelSerializer):
         instance.is_archive = validated_data.get('is_archive', instance.is_archive)
         instance.save()
 
-        if product_markings_data is not None:
-            instance.product_markings.clear()
-            for marking in product_markings_data:
-                marking.outcome = instance
-                marking.save()
+        # Меняем список маркировок только если документ не архив: отвязать старые, затем привязать новые
+        # тем же атомарным способом (bulk update по outcome__isnull=True + проверка числа строк).
+        if product_markings_data is not None and not instance.is_archive:
+            self._validate_markings_not_already_written_off(product_markings_data, instance=instance)
+            ProductMarking.objects.filter(outcome=instance).update(outcome=None)
+            marking_ids = [m.id for m in product_markings_data]
+            updated = ProductMarking.objects.filter(
+                id__in=marking_ids, outcome__isnull=True
+            ).update(outcome=instance)
+            if updated != len(marking_ids):
+                raise ValidationError({
+                    'product_markings': [
+                        'Часть маркировок уже привязана к другому расходу. Обновите страницу и попробуйте снова.'
+                    ]
+                })
 
         return instance
 

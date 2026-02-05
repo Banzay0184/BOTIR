@@ -13,8 +13,8 @@ const OutcomeChart = () => {
         const fetchData = async () => {
             try {
                 const [outcomesResponse, productsResponse] = await Promise.all([getOutcomes(), getProducts()]);
-                const outcomes = outcomesResponse.data;
-                const products = productsResponse.data;
+                const outcomes = outcomesResponse.data?.results ?? outcomesResponse.data;
+                const products = productsResponse.data?.results ?? productsResponse.data;
 
                 if (!Array.isArray(outcomes)) {
                     throw new Error("Invalid response format");
@@ -77,7 +77,7 @@ const OutcomeChart = () => {
 
     const chartConfig = {
         type: "bar",
-        height: 200, // Уменьшенная высота графика
+        height: 220,
         width: "100%",
         series: chartData.series,
         options: {
@@ -187,9 +187,11 @@ const OutcomeChart = () => {
     };
 
     return (
-        <div>
-            <h2 className='text-xl font-bold mb-4'>Расход</h2>
-            <Chart {...chartConfig} />
+        <div className="w-full min-w-0 overflow-hidden p-3 sm:p-4">
+            <h2 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4">Расход</h2>
+            <div className="w-full min-w-0 overflow-x-auto">
+                <Chart {...chartConfig} />
+            </div>
         </div>
     );
 };

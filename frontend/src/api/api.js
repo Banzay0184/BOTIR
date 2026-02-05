@@ -1,8 +1,32 @@
 import axios from 'axios';
 
-// const API_URL = 'http://127.0.0.1:8000/api/v1';  // Adjust the URL as needed
+const API_URL = 'http://127.0.0.1:8000/api/v1';  // Adjust the URL as needed
 
-const API_URL = 'https://banzay.pythonanywhere.com/api/v1';
+// Единый формат ошибок API: { error: { code, message, details } }
+// Упрощает тосты, локализацию и логирование.
+export const getApiError = (err) => {
+    const data = err?.response?.data;
+    if (data?.error && typeof data.error === 'object') {
+        return {
+            code: data.error.code ?? 'ERROR',
+            message: data.error.message ?? 'Произошла ошибка',
+            details: data.error.details ?? null,
+        };
+    }
+    const detail = data?.detail;
+    const message = Array.isArray(detail) ? detail[0] : (typeof detail === 'string' ? detail : null);
+    return {
+        code: 'ERROR',
+        message: message || (err?.message ?? 'Ошибка сети'),
+        details: data ?? null,
+    };
+};
+
+export const getApiErrorMessage = (err) => getApiError(err).message;
+export const getApiErrorCode = (err) => getApiError(err).code;
+export const getApiErrorDetails = (err) => getApiError(err).details;
+
+// const API_URL = 'https://banzay.pythonanywhere.com/api/v1';
 
 
 const axiosInstance = axios.create({
@@ -11,6 +35,12 @@ const axiosInstance = axios.create({
         'Content-Type': 'application/json',
     },
 });
+
+// Вспомогательная функция выхода (используется в интерцепторе до определения AuthService)
+const clearSessionAndRedirect = () => {
+    sessionStorage.removeItem('user');
+    window.location.href = '/';
+};
 
 // Add Axios Interceptors
 
@@ -26,33 +56,43 @@ axiosInstance.interceptors.request.use(
     (error) => Promise.reject(error)
 );
 
-// Response Interceptor to handle token refresh
+// Response Interceptor: 401 → refresh (ROTATE_REFRESH_TOKENS) → save new access + new refresh → retry
 axiosInstance.interceptors.response.use(
     (response) => response,
     async (error) => {
         const originalRequest = error.config;
-        if (error.response.status === 401 && !originalRequest._retry) {
+        if (error.response?.status === 401 && !originalRequest._retry) {
             originalRequest._retry = true;
             const user = JSON.parse(sessionStorage.getItem('user'));
 
-            if (user && user.refreshToken) {
-                try {
-                    const response = await axios.post(`${API_URL}/token/refresh/`, {
-                        refresh: user.refreshToken,
-                    });
+            if (!user?.refreshToken) {
+                return Promise.reject(error);
+            }
 
-                    if (response.data.access) {
-                        user.accessToken = response.data.access;
-                        sessionStorage.setItem('user', JSON.stringify(user));
-                        axiosInstance.defaults.headers['Authorization'] = 'Bearer ' + response.data.access;
-                        originalRequest.headers['Authorization'] = 'Bearer ' + response.data.access;
-                        return axiosInstance(originalRequest);
-                    }
-                } catch (refreshError) {
-                    console.error('Failed to refresh token:', refreshError);
-                    AuthService.logout();
-                    window.location.href = '/login';
+            try {
+                const { data } = await axios.post(`${API_URL}/token/refresh/`, {
+                    refresh: user.refreshToken,
+                });
+
+                if (!data.access) {
+                    return Promise.reject(error);
                 }
+
+                // ROTATE_REFRESH_TOKENS: сервер отдаёт новый refresh — сохраняем оба + groups для UI
+                const updatedUser = {
+                    ...user,
+                    accessToken: data.access,
+                    refreshToken: data.refresh ?? user.refreshToken,
+                    ...(Array.isArray(data.groups) && { groups: data.groups }),
+                    ...(typeof data.is_superuser === 'boolean' && { is_superuser: data.is_superuser }),
+                };
+                sessionStorage.setItem('user', JSON.stringify(updatedUser));
+                originalRequest.headers['Authorization'] = `Bearer ${data.access}`;
+                return axiosInstance(originalRequest);
+            } catch (refreshError) {
+                console.error('Failed to refresh token:', refreshError);
+                clearSessionAndRedirect();
+                return Promise.reject(refreshError);
             }
         }
         return Promise.reject(error);
@@ -64,13 +104,20 @@ axiosInstance.interceptors.response.use(
 export const getCompanies = () => axiosInstance.get('/companies/');
 export const createCompany = (data) => axiosInstance.post('/companies/', data);
 
-export const getProducts = () => axiosInstance.get('/products/');
+export const getProducts = (signal) =>
+    axiosInstance.get('/products/', signal ? { signal } : {});
 export const createProduct = (data) => axiosInstance.post('/products/', data);
 
 export const getProductMarkings = () => axiosInstance.get('/product-markings/');
 export const createProductMarking = (data) => axiosInstance.post('/product-markings/', data);
 
-export const getIncomes = () => axiosInstance.get('/incomes/');
+export const getDashboardStats = (year, signal) =>
+    axiosInstance.get('/stats/dashboard/', { params: year != null ? { year } : {}, ...(signal ? { signal } : {}) });
+
+export const getIncomes = (signal, params = {}) =>
+    axiosInstance.get('/incomes/', { ...(signal ? { signal } : {}), params });
+export const getIncomeById = (id, signal) =>
+    axiosInstance.get(`/incomes/${id}/`, signal ? { signal } : {});
 export const createIncome = (data) => axiosInstance.post('/incomes/', data);
 
 export const updateMarking = async (incomeId, productId, markingId, newMarking, newMarkingCounter) => {
@@ -88,7 +135,10 @@ export const updateMarking = async (incomeId, productId, markingId, newMarking, 
 
 export const checkMarkingExists = (marking) => axiosInstance.get(`/product-markings/check-marking/${marking}/`);
 
-export const getOutcomes = () => axiosInstance.get('/outcomes/');
+export const getOutcomes = (params = {}, signal) =>
+    axiosInstance.get('/outcomes/', { params, ...(signal ? { signal } : {}) });
+export const getOutcomeById = (id, signal) =>
+    axiosInstance.get(`/outcomes/${id}/`, signal ? { signal } : {});
 export const createOutcome = (data) => axiosInstance.post('/outcomes/', data);
 
 export const updateIncome = async (incomeId, updatedData) => {
@@ -103,7 +153,6 @@ export const updateIncome = async (incomeId, updatedData) => {
 
 export const updateOutcome = async (outcomeId, updatedData) => {
     try {
-        console.log('Updating outcome with data:', updatedData);
         const response = await axiosInstance.put(`/outcomes/${outcomeId}/`, updatedData);
         return response.data;
     } catch (error) {
@@ -111,6 +160,11 @@ export const updateOutcome = async (outcomeId, updatedData) => {
         throw error;
     }
 };
+
+export const archiveIncome = (incomeId) => axiosInstance.post(`/incomes/${incomeId}/archive/`);
+export const unarchiveIncome = (incomeId) => axiosInstance.post(`/incomes/${incomeId}/unarchive/`);
+export const archiveOutcome = (outcomeId) => axiosInstance.post(`/outcomes/${outcomeId}/archive/`);
+export const unarchiveOutcome = (outcomeId) => axiosInstance.post(`/outcomes/${outcomeId}/unarchive/`);
 
 export const deleteMarking = async (incomeId, productId, markingId) => {
     try {
@@ -145,6 +199,15 @@ export const deleteIncome = async (incomeId) => {
     }
 };
 
+// Admin API (только для пользователей в группе admin)
+export const getAdminUsers = () => axiosInstance.get('/admin/users/');
+export const getAdminUser = (id) => axiosInstance.get(`/admin/users/${id}/`);
+export const createAdminUser = (data) => axiosInstance.post('/admin/users/', data);
+export const updateAdminUser = (id, data) => axiosInstance.patch(`/admin/users/${id}/`, data);
+export const getAdminRoles = () => axiosInstance.get('/admin/roles/');
+export const adminResetPassword = (userId, newPassword) =>
+    axiosInstance.post('/admin/reset-password/', { user_id: userId, new_password: newPassword });
+
 
 class AuthService {
     login(username, password) {
@@ -160,6 +223,8 @@ class AuthService {
                         email: response.data.email,
                         phone: response.data.phone,
                         position: response.data.position,
+                        groups: response.data.groups ?? [],
+                        is_superuser: Boolean(response.data.is_superuser),
                     };
                     sessionStorage.setItem('user', JSON.stringify(user));
                     return user;
@@ -188,5 +253,36 @@ class AuthService {
         return JSON.parse(sessionStorage.getItem('user'));
     }
 }
+
+// Helpers: права по группам (только для UI; сервер проверяет по request.user.groups)
+export const getGroups = () => {
+    try {
+        const user = JSON.parse(sessionStorage.getItem('user'));
+        return Array.isArray(user?.groups) ? user.groups : [];
+    } catch {
+        return [];
+    }
+};
+
+export const isAdmin = () => {
+    try {
+        const user = JSON.parse(sessionStorage.getItem('user'));
+        if (user?.is_superuser) return true;
+    } catch {
+        // ignore
+    }
+    return getGroups().includes('admin');
+};
+
+export const canEdit = () => {
+    try {
+        const user = JSON.parse(sessionStorage.getItem('user'));
+        if (user?.is_superuser) return true;
+    } catch {
+        // ignore
+    }
+    const groups = getGroups();
+    return groups.includes('admin') || groups.includes('operator');
+};
 
 export default new AuthService();

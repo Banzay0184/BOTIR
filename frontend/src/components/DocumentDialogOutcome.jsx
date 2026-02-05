@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Dialog, DialogHeader, DialogBody, DialogFooter, Button } from '@material-tailwind/react';
+import { Button } from '@material-tailwind/react';
+import SimpleDialog from './SimpleDialog';
 import { getProducts } from '../api/api.js';
 
 const DocumentDialogOutcome = ({ isOpen, onClose, outcome }) => {
@@ -8,12 +9,12 @@ const DocumentDialogOutcome = ({ isOpen, onClose, outcome }) => {
     useEffect(() => {
         const fetchProductDetails = async () => {
             try {
-                const products = await getProducts(); // Fetch all products
-                console.log('Fetched Products:', products.data);
+                const response = await getProducts();
+                const data = response.data?.results ?? response.data;
+                const productsList = Array.isArray(data) ? data : [];
 
-                // Map each marking to its respective product and count the markings per product
                 const details = outcome.product_markings.reduce((acc, marking) => {
-                    const product = products.data.find((p) => p.id === marking.product);
+                    const product = productsList.find((p) => p.id === marking.product);
                     if (!product) {
                         console.warn(`Product with ID ${marking.product} not found`);
                         return acc;
@@ -49,15 +50,21 @@ const DocumentDialogOutcome = ({ isOpen, onClose, outcome }) => {
     if (!outcome) return null;
 
     return (
-        <Dialog open={isOpen} handler={onClose} size="xl" className="flex-1 overflow-y-auto max-h-[calc(100vh-200px)]">
-            <DialogHeader className='flex justify-between'>
-                <p>Документ</p>
-                <svg onClick={onClose} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                     strokeWidth={1.5} stroke="currentColor" className="size-6 cursor-pointer">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12"/>
-                </svg>
-            </DialogHeader>
-            <DialogBody className="overflow-auto">
+        <SimpleDialog open={isOpen} onClose={onClose} size="xl" className="flex-1 overflow-y-auto max-h-[calc(100vh-200px)]">
+            <div className="flex shrink-0 items-center justify-between border-b border-blue-gray-200 p-4">
+                <p className="text-lg font-semibold">Документ</p>
+                <button
+                    type="button"
+                    onClick={onClose}
+                    className="rounded-lg p-1 hover:bg-blue-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-gray-200"
+                    aria-label="Закрыть"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-6">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div className="overflow-auto p-4">
                 <div className="space-y-4">
                     <div>
                         <p><strong>Номер контракта:</strong> {outcome.contract_number}</p>
@@ -119,11 +126,11 @@ const DocumentDialogOutcome = ({ isOpen, onClose, outcome }) => {
                         </tbody>
                     </table>
                 </div>
-            </DialogBody>
-            <DialogFooter>
+            </div>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-blue-gray-200 p-4">
                 <Button onClick={onClose}>Закрыть</Button>
-            </DialogFooter>
-        </Dialog>
+            </div>
+        </SimpleDialog>
     );
 };
 

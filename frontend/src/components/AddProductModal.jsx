@@ -1,6 +1,6 @@
 import React, {useState} from 'react';
 import {Dialog, DialogHeader, DialogBody, DialogFooter, Button, Input} from '@material-tailwind/react';
-import {createProduct} from '../api/api';
+import {createProduct, getApiErrorMessage, getApiErrorDetails} from '../api/api';
 
 const AddProductModal = ({isOpen, onClose, onAddProduct}) => {
     const [productData, setProductData] = useState({
@@ -31,26 +31,18 @@ const AddProductModal = ({isOpen, onClose, onAddProduct}) => {
             onAddProduct(response.data); // Передаем новый продукт обратно в родительский компонент
             onClose();
         } catch (error) {
-            if (error.response && error.response.data) {
-                const serverErrors = error.response.data;
-                const newErrors = {};
-                if (serverErrors.name) {
-                    newErrors.name = serverErrors.name[0];
-
+            const details = getApiErrorDetails(error);
+            if (details && typeof details === 'object' && !Array.isArray(details)) {
+                const fieldErrors = {};
+                for (const [key, val] of Object.entries(details)) {
+                    fieldErrors[key] = Array.isArray(val) ? val[0] : String(val);
                 }
-                if (serverErrors.kpi) {
-                    newErrors.kpi = serverErrors.kpi[0];
-                }
-                if (serverErrors.price) {
-                    newErrors.price = serverErrors.price[0];
-                    error
-                }
-                setErrors(newErrors);
+                setErrors(fieldErrors);
             } else {
-                console.error('Ошибка при добавлении продукта:', error.message);
+                setErrors({ __message: getApiErrorMessage(error) });
             }
+            console.error('Ошибка при добавлении продукта:', error.response?.data ?? error.message);
         }
-        console.log(e.target.reset(), error );
     };
 
     return (
@@ -58,6 +50,9 @@ const AddProductModal = ({isOpen, onClose, onAddProduct}) => {
             <DialogHeader>Добавить Продукт</DialogHeader>
             <DialogBody>
                 <form id="product-form" onSubmit={handleSubmit} className="space-y-4">
+                    {errors.__message && (
+                        <p className="text-red-500 text-sm">{errors.__message}</p>
+                    )}
                     <div>
                         <Input
                             type="text"

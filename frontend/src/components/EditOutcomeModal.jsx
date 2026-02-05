@@ -1,7 +1,7 @@
 import React, {useState, useEffect} from 'react';
 import Select from 'react-select';
 import {Dialog, DialogHeader, DialogBody, DialogFooter, Button, Input} from '@material-tailwind/react';
-import {updateOutcome, getCompanies} from '../api/api';
+import {updateOutcome, getCompanies, getApiErrorMessage} from '../api/api';
 import AddCompanyModal from './AddCompanyModal';
 
 const EditOutcomeModal = ({isOpen, onClose, outcome, onUpdateOutcome}) => {
@@ -123,17 +123,8 @@ const EditOutcomeModal = ({isOpen, onClose, outcome, onUpdateOutcome}) => {
             onUpdateOutcome(response);
             onClose();
         } catch (error) {
-            if (error.response && error.response.data) {
-                const errorData = error.response.data;
-                if (errorData.non_field_errors) {
-                    setError(errorData.non_field_errors[0]);
-                } else {
-                    setError('Произошла ошибка при обновлении расхода.');
-                }
-            } else {
-                setError('Произошла ошибка при обновлении расхода.');
-            }
-            console.error('Error updating outcome:', error.response?.data || error.message);
+            setError(getApiErrorMessage(error));
+            console.error('Error updating outcome:', error.response?.data ?? error.message);
         }
     };
 

@@ -4,9 +4,9 @@ import OutcomeDocument from "../components/OutcomeDocument.jsx";
 
 const DocumentPage = () => {
     return (
-        <>
+        <div className="w-full min-w-0 h-full overflow-auto">
             <IncomeDocument/>
-        </>
+        </div>
     );
 };
 

@@ -1,36 +1,27 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useRef} from 'react';
 import Select from 'react-select';
 import {Dialog, DialogHeader, DialogBody, DialogFooter, Button, Input} from '@material-tailwind/react';
-import {createIncome, getCompanies, getProducts, checkMarkingExists} from '../api/api';
+import {LockClosedIcon} from '@heroicons/react/24/solid';
+import {createIncome, updateIncome, getIncomeById, getCompanies, getProducts, checkMarkingExists, getApiErrorMessage} from '../api/api';
 import AddCompanyModal from './AddCompanyModal';
 import AddProductModal from './AddProductModal';
 import * as XLSX from 'xlsx';
 
-const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
-    const [formData, setFormData] = useState({
-        from_company: {
-            id: '',
-            name: '',
-            phone: '',
-            inn: '',
-        },
-        contract_date: '',
-        contract_number: '',
-        invoice_date: '',
-        invoice_number: '',
-        unit_of_measure: '',
-        total: 0,
-        products: [
-            {
-                id: '',
-                name: '',
-                kpi: '',
-                price: '',
-                quantity: '',
-                markings: [],
-            },
-        ],
-    });
+const emptyForm = () => ({
+    from_company: { id: '', name: '', phone: '', inn: '' },
+    contract_date: '',
+    contract_number: '',
+    invoice_date: '',
+    invoice_number: '',
+    unit_of_measure: '',
+    total: 0,
+    products: [{ id: '', name: '', kpi: '', price: '', quantity: '', markings: [] }],
+});
+
+const AddIncomeModal = ({isOpen, onClose, onAddIncome, income: editIncome, onUpdateIncome}) => {
+    const isEditMode = Boolean(editIncome?.id);
+    const [formData, setFormData] = useState(emptyForm());
+    const initialMarkingValuesRef = useRef(new Set());
 
     const [companyOptions, setCompanyOptions] = useState([]);
     const [productOptions, setProductOptions] = useState([]);
@@ -44,43 +35,144 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
     const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
-        if (isOpen) {
-            const fetchCompanies = async () => {
-                try {
-                    const response = await getCompanies();
-                    const options = response.data.map(company => ({
+        if (!isOpen) return;
+
+        const fetchCompanies = async () => {
+            try {
+                const response = await getCompanies();
+                const options = response.data.map(company => ({
+                    value: company.id,
+                    label: company.name,
+                    phone: company.phone,
+                    inn: company.inn,
+                }));
+                setCompanyOptions((prev) => {
+                    const combined = [...options];
+                    prev.forEach((o) => {
+                        if (!combined.some((c) => Number(c.value) === Number(o.value))) combined.push(o);
+                    });
+                    return combined;
+                });
+            } catch (err) {
+                console.error('Error fetching companies:', err);
+            }
+        };
+
+        const fetchProducts = async () => {
+            try {
+                const response = await getProducts();
+                const data = response.data?.results ?? response.data;
+                const productsList = Array.isArray(data) ? data : [];
+                const options = productsList.map(product => ({
+                    value: product.id,
+                    label: product.name,
+                    kpi: product.kpi,
+                    price: product.price,
+                    quantity: product.quantity ?? 0,
+                }));
+                setProductOptions((prev) => {
+                    const combined = [...options];
+                    prev.forEach((o) => {
+                        if (!combined.some((c) => Number(c.value) === Number(o.value))) combined.push(o);
+                    });
+                    return combined;
+                });
+            } catch (err) {
+                console.error('Error fetching products:', err);
+            }
+        };
+
+        fetchCompanies();
+        fetchProducts();
+
+        if (isEditMode && editIncome?.id) {
+            const controller = new AbortController();
+            getIncomeById(editIncome.id, controller.signal)
+                .then((res) => {
+                    const inc = res.data;
+                    const productMarkings = inc.product_markings ?? [];
+                    const byProduct = {};
+                    productMarkings.forEach((m) => {
+                        const pid = m.product;
+                        if (!byProduct[pid]) {
+                            byProduct[pid] = {
+                                id: pid,
+                                name: m.product_name ?? '',
+                                kpi: String(m.product_kpi ?? ''),
+                                price: String(m.product_price ?? ''),
+                                quantity: 0,
+                                markings: [],
+                            };
+                        }
+                        const writtenOff = Boolean(m.outcome);
+                        byProduct[pid].markings.push({
+                            marking: m.marking ?? '',
+                            counter: m.counter ?? false,
+                            writtenOff,
+                        });
+                        initialMarkingValuesRef.current.add(String(m.marking).trim());
+                        byProduct[pid].quantity = byProduct[pid].markings.length;
+                    });
+                    const products = Object.values(byProduct);
+                    const company = inc.from_company;
+                    const companyOption = company && {
                         value: company.id,
                         label: company.name,
-                        phone: company.phone,
-                        inn: company.inn,
-                    }));
-                    setCompanyOptions(options);
-                } catch (error) {
-                    console.error('Error fetching companies:', error);
-                }
-            };
-
-            const fetchProducts = async () => {
-                try {
-                    const response = await getProducts();
-                    const filteredProducts = response.data.filter(product => product.quantity === 0);
-                    const options = filteredProducts.map(product => ({
-                        value: product.id,
-                        label: product.name,
-                        kpi: product.kpi,
-                        price: product.price,
-                        quantity: product.quantity,
-                    }));
-                    setProductOptions(options);
-                } catch (error) {
-                    console.error('Error fetching products:', error);
-                }
-            };
-
-            fetchCompanies();
-            fetchProducts();
+                        phone: company.phone ?? '',
+                        inn: company.inn ?? '',
+                    };
+                    setCompanyOptions((prev) => {
+                        if (!companyOption) return prev;
+                        if (prev.some((o) => o.value === companyOption.value)) return prev;
+                        return [...prev, companyOption];
+                    });
+                    setProductOptions((prev) => {
+                        const next = [...prev];
+                        products.forEach((p) => {
+                            if (!p.id || next.some((o) => o.value === p.id)) return;
+                            next.push({
+                                value: p.id,
+                                label: p.name,
+                                kpi: p.kpi,
+                                price: p.price,
+                                quantity: p.quantity ?? 0,
+                            });
+                        });
+                        return next;
+                    });
+                    setFormData({
+                        from_company: {
+                            id: company?.id ?? '',
+                            name: company?.name ?? '',
+                            phone: company?.phone ?? '',
+                            inn: company?.inn ?? '',
+                        },
+                        contract_date: inc.contract_date ?? '',
+                        contract_number: inc.contract_number ?? '',
+                        invoice_date: inc.invoice_date ?? '',
+                        invoice_number: inc.invoice_number ?? '',
+                        unit_of_measure: inc.unit_of_measure ?? '',
+                        total: Number(inc.total) ?? 0,
+                        products: products.length ? products : [{ id: '', name: '', kpi: '', price: '', quantity: '', markings: [] }],
+                    });
+                    setError('');
+                })
+                .catch((err) => {
+                    if (err.name !== 'CanceledError' && err.name !== 'AbortError') {
+                        setError(getApiErrorMessage(err));
+                    }
+                });
+            return () => controller.abort();
         }
-    }, [isOpen]);
+
+        if (!isEditMode) {
+            setFormData(emptyForm());
+            initialMarkingValuesRef.current = new Set();
+            setError('');
+            setManualTotal(false);
+            setFileInputKey(Date.now());
+        }
+    }, [isOpen, isEditMode, editIncome?.id]);
 
     const handleCompanyChange = (selectedOption) => {
         const selectedCompany = companyOptions.find(company => company.value === selectedOption.value);
@@ -191,10 +283,23 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
         }
 
         if (name === 'quantity') {
-            const quantity = parseInt(value, 10);
-            newProducts[index].markings = Array.from({length: quantity}, (_, i) => ({
-                marking: '',
-            }));
+            const quantity = parseInt(value, 10) || 0;
+            const current = newProducts[index].markings;
+            if (isEditMode && current.length) {
+                if (quantity > current.length) {
+                    newProducts[index].markings = [...current, ...Array(quantity - current.length).fill(null).map(() => ({ marking: '', counter: false }))];
+                } else if (quantity < current.length) {
+                    let canRemove = 0;
+                    for (let i = current.length - 1; i >= 0 && !current[i].writtenOff; i--) canRemove++;
+                    const toRemove = Math.min(current.length - quantity, canRemove);
+                    if (toRemove > 0) {
+                        newProducts[index].markings = current.slice(0, current.length - toRemove);
+                    }
+                }
+            } else {
+                newProducts[index].markings = Array.from({ length: quantity }, () => ({ marking: '' }));
+            }
+            newProducts[index].quantity = newProducts[index].markings.length;
         }
 
         setFormData((prevData) => {
@@ -223,11 +328,18 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
     const handleMarkingChange = (productIndex, markingIndex, e) => {
         const {value} = e.target;
         const newProducts = [...formData.products];
+        if (newProducts[productIndex].markings[markingIndex].writtenOff) return;
         newProducts[productIndex].markings[markingIndex].marking = value;
-        setFormData((prevData) => ({
-            ...prevData,
-            products: newProducts,
-        }));
+        setFormData((prevData) => ({ ...prevData, products: newProducts }));
+    };
+
+    const handleRemoveMarking = (productIndex, markingIndex) => {
+        const product = formData.products[productIndex];
+        if (product.markings[markingIndex].writtenOff) return;
+        const newProducts = [...formData.products];
+        newProducts[productIndex].markings = product.markings.filter((_, i) => i !== markingIndex);
+        newProducts[productIndex].quantity = newProducts[productIndex].markings.length;
+        setFormData((prev) => ({ ...prev, products: newProducts, total: manualTotal ? prev.total : calculateTotal(newProducts) }));
     };
 
     const handleFileUpload = (event, productIndex) => {
@@ -292,18 +404,20 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
 
     const checkDuplicateMarkings = async () => {
         const errors = {};
+        const existingOnThisDoc = initialMarkingValuesRef.current;
         for (let i = 0; i < formData.products.length; i++) {
             for (let j = 0; j < formData.products[i].markings.length; j++) {
                 const marking = formData.products[i].markings[j].marking;
-                if (marking) {
-                    try {
-                        const response = await checkMarkingExists(marking);
-                        if (response.data.exists) {
-                            errors[`${i}-${j}`] = `Маркировка "${marking}" уже существует в базе данных.`;
-                        }
-                    } catch (error) {
-                        console.error('Ошибка проверки маркировки:', error);
+                if (!marking) continue;
+                const key = String(marking).trim();
+                if (isEditMode && existingOnThisDoc.has(key)) continue;
+                try {
+                    const response = await checkMarkingExists(marking);
+                    if (response.data.exists) {
+                        errors[`${i}-${j}`] = `Маркировка "${marking}" уже существует в базе данных.`;
                     }
+                } catch (error) {
+                    console.error('Ошибка проверки маркировки:', error);
                 }
             }
         }
@@ -352,8 +466,7 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
 
         const filteredProducts = filterProducts(formData.products);
 
-        // Подготовка данных для отправки
-        const dataToSubmit = {
+        const payload = {
             ...formData,
             total: parseFloat(formData.total),
             products: filteredProducts.map(product => ({
@@ -361,36 +474,31 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
                 kpi: parseFloat(product.kpi),
                 price: parseFloat(product.price),
                 quantity: parseInt(product.quantity, 10),
-                markings: product.markings,
+                markings: product.markings.map(({ marking, counter }) => ({ marking, counter })),
             })),
         };
 
-        if (!dataToSubmit.from_company.name) {
+        if (!payload.from_company.name) {
             setError('Не выбрана компания.');
-            return; // Прекращение выполнения, если есть ошибки
+            return;
         }
 
-        setIsSaving(true); // Устанавливаем состояние загрузки
-
+        setIsSaving(true);
         try {
-            const response = await createIncome(dataToSubmit);
-            console.log('Income created successfully:', response.data);
-            onAddIncome(response.data);
-            onClose();
-        } catch (error) {
-            if (error.response && error.response.data) {
-                const errorData = error.response.data;
-                if (errorData.non_field_errors) {
-                    setError(errorData.non_field_errors[0]);
-                } else {
-                    setError('Произошла ошибка при добавлении дохода.');
-                }
+            if (isEditMode) {
+                const response = await updateIncome(editIncome.id, payload);
+                onUpdateIncome?.(response.data);
+                onClose();
             } else {
-                setError('Произошла ошибка при добавлении дохода.');
+                const response = await createIncome(payload);
+                onAddIncome?.(response.data);
+                onClose();
             }
-            console.error('Error adding income:', error.response?.data || error.message);
+        } catch (error) {
+            setError(getApiErrorMessage(error));
+            console.error(isEditMode ? 'Error updating income:' : 'Error adding income:', error.response?.data ?? error.message);
         } finally {
-            setIsSaving(false); // Останавливаем загрузку
+            setIsSaving(false);
         }
     };
 
@@ -398,7 +506,7 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
         <>
             <Dialog open={isOpen} onClose={onClose}>
                 <DialogHeader className='flex justify-between'>
-                    <p>Добавить товар</p>
+                    <p>{isEditMode ? 'Редактировать приход' : 'Добавить товар'}</p>
                     <svg onClick={onClose} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                          strokeWidth={1.5} stroke="currentColor" className="size-6 cursor-pointer">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12"/>
@@ -413,7 +521,12 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
                                     options={companyOptions}
                                     onChange={handleCompanyChange}
                                     placeholder="Выберите компанию"
-                                    value={companyOptions.find(option => option.value === formData.from_company.id) || null}
+                                    value={
+                                        companyOptions.find((o) => Number(o.value) === Number(formData.from_company.id)) ||
+                                        (formData.from_company.id && formData.from_company.name
+                                            ? { value: formData.from_company.id, label: formData.from_company.name }
+                                            : null)
+                                    }
                                 />
                             </div>
                             <Button
@@ -516,7 +629,12 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
                                             options={productOptions}
                                             onChange={(option) => handleProductSelect(index, option.value)}
                                             placeholder="Выберите продукт"
-                                            value={productOptions.find(option => option.value === formData.products[index].id) || null}
+                                            value={
+                                                productOptions.find((o) => Number(o.value) === Number(formData.products[index]?.id)) ||
+                                                (formData.products[index]?.id && formData.products[index]?.name
+                                                    ? { value: formData.products[index].id, label: formData.products[index].name }
+                                                    : null)
+                                            }
                                         />
                                     </div>
                                     <Button
@@ -572,13 +690,34 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome}) => {
 
                                 {product.markings.map((marking, markingIndex) => (
                                     <div key={markingIndex} className="mb-2">
-                                        <Input
-                                            type="text"
-                                            label={`Маркировка ${markingIndex + 1}`}
-                                            value={marking.marking}
-                                            onChange={(e) => handleMarkingChange(index, markingIndex, e)}
-                                            required
-                                        />
+                                        <div className="flex items-center gap-2">
+                                            {marking.writtenOff && (
+                                                <span className="shrink-0 text-amber-600" title="Списана, изменение запрещено">
+                                                    <LockClosedIcon className="w-5 h-5" aria-hidden />
+                                                </span>
+                                            )}
+                                            <Input
+                                                type="text"
+                                                label={`Маркировка ${markingIndex + 1}`}
+                                                value={marking.marking}
+                                                onChange={(e) => handleMarkingChange(index, markingIndex, e)}
+                                                disabled={marking.writtenOff}
+                                                required
+                                                className="flex-1 min-w-0"
+                                            />
+                                            {!marking.writtenOff && (
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    color="red"
+                                                    onClick={() => handleRemoveMarking(index, markingIndex)}
+                                                    className="shrink-0"
+                                                    aria-label="Удалить маркировку"
+                                                >
+                                                    ×
+                                                </Button>
+                                            )}
+                                        </div>
                                         {markingErrors[`${index}-${markingIndex}`] && (
                                             <div className="text-red-500 mt-1">
                                                 {markingErrors[`${index}-${markingIndex}`]}

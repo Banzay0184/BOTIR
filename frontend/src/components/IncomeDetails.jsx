@@ -1,18 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogHeader, DialogBody, DialogFooter, Button } from '@material-tailwind/react';
+import { Button } from '@material-tailwind/react';
+import SimpleDialog from './SimpleDialog';
 import { getProducts } from '../api/api';
-import DocumentDialogIncome from './DocumentDialogIncome.jsx';
 
-const IncomeDetails = ({ isOpen, onClose, income }) => {
+const IncomeDetails = ({ isOpen, onClose, income, onShowDocument }) => {
     const [products, setProducts] = useState({});
-    const [showDocument, setShowDocument] = useState(false);
 
     useEffect(() => {
-        console.log('Income object:', income);
+        const controller = new AbortController();
         const fetchProducts = async () => {
             try {
-                const response = await getProducts();
-                const productMap = response.data.reduce((map, product) => {
+                const response = await getProducts(controller.signal);
+                if (controller.signal.aborted) return;
+                const data = response.data?.results ?? response.data;
+                const list = Array.isArray(data) ? data : [];
+                const productMap = list.reduce((map, product) => {
                     map[product.id] = {
                         name: product.name,
                         price: product.price,
@@ -21,11 +23,13 @@ const IncomeDetails = ({ isOpen, onClose, income }) => {
                 }, {});
                 setProducts(productMap);
             } catch (error) {
+                if (controller.signal.aborted) return;
                 console.error('Failed to fetch products:', error);
             }
         };
 
         fetchProducts();
+        return () => controller.abort();
     }, []);
 
     if (!income) return null;
@@ -40,7 +44,10 @@ const IncomeDetails = ({ isOpen, onClose, income }) => {
     };
 
     const groupedMarkings = income.product_markings.reduce((acc, marking) => {
-        const productName = products[marking.product]?.name || `Product ID ${marking.product}`;
+        const productName =
+            marking.product_name ||
+            products[marking.product]?.name ||
+            `Товар ID ${marking.product}`;
         if (!acc[productName]) {
             acc[productName] = [];
         }
@@ -49,15 +56,22 @@ const IncomeDetails = ({ isOpen, onClose, income }) => {
     }, {});
 
     return (
-        <Dialog open={isOpen} handler={onClose} size="lg" className="overflow-auto">
-            <DialogHeader className='flex justify-between'>
-                <p>Детали прихода</p>
-                <svg onClick={onClose} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                    strokeWidth={1.5} stroke="currentColor" className="size-6 cursor-pointer">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-            </DialogHeader>
-            <DialogBody className="flex-1 overflow-y-auto max-h-[calc(100vh-200px)]">
+        <SimpleDialog open={isOpen} onClose={onClose} size="lg" className="overflow-auto">
+            <div className="flex justify-between items-center p-4 border-b border-blue-gray-100">
+                <p className="font-semibold text-lg">Детали прихода</p>
+                <button
+                    type="button"
+                    onClick={onClose}
+                    className="p-1 rounded hover:bg-blue-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    aria-label="Закрыть"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                        strokeWidth={1.5} stroke="currentColor" className="size-6">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div className="flex-1 overflow-y-auto max-h-[calc(100vh-200px)] p-4">
                 <div className="space-y-4">
                     {/* Информация о компании и контактах */}
                     <div>
@@ -115,22 +129,21 @@ const IncomeDetails = ({ isOpen, onClose, income }) => {
                         <p><strong>Добавил(а) доход:</strong> {income.added_by ? income.added_by : 'Неизвестно'}</p>
                     </div>
                 </div>
-                <Button
-                    color="green"
-                    size="sm"
-                    className="mt-4"
-                    onClick={() => setShowDocument(true)}
-                >
-                    Показать документ
-                </Button>
-            </DialogBody>
-            <DialogFooter>
+                {onShowDocument && (
+                    <Button
+                        color="green"
+                        size="sm"
+                        className="mt-4"
+                        onClick={() => onShowDocument(income)}
+                    >
+                        Показать документ
+                    </Button>
+                )}
+            </div>
+            <div className="flex justify-end gap-2 p-4 border-t border-blue-gray-100">
                 <Button onClick={onClose}>Закрыть</Button>
-            </DialogFooter>
-
-            {/* Использование отдельного компонента DocumentDialogIncome */}
-            <DocumentDialogIncome isOpen={showDocument} onClose={() => setShowDocument(false)} income={income} />
-        </Dialog>
+            </div>
+        </SimpleDialog>
     );
 };
 

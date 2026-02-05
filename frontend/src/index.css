@@ -2,6 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Адаптивность: safe area для вырезов экрана (iPhone и т.д.) */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Минимальный размер зоны нажатия для тач-устройств (44px) */
+@layer utilities {
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
 
 .loader {
     border-top-color: #3498db;

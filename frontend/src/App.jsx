@@ -9,6 +9,10 @@ import IncomeList from "./components/IncomeList.jsx";
 import OutcomeList from "./components/OutcomeList.jsx";
 import IncomeDocument from "./components/IncomeDocument.jsx";
 import OutcomeDocument from "./components/OutcomeDocument.jsx";
+import ArchivePage from "./pages/ArchivePage.jsx";
+import IncomeDocumentViewPage from "./pages/IncomeDocumentViewPage.jsx";
+import OutcomeDocumentViewPage from "./pages/OutcomeDocumentViewPage.jsx";
+import UsersPage from "./pages/UsersPage.jsx";
 import AuthService from './api/api.js';
 
 function App() {
@@ -44,7 +48,11 @@ function App() {
                     <Route path="/income" element={<IncomeList currentUser={currentUser}/>}/>
                     <Route path="/outcome" element={<OutcomeList/>}/>
                     <Route path="/incomedocument" element={<IncomeDocument currentUser={currentUser}/>}/>
+                    <Route path="/incomedocument/:id" element={<IncomeDocumentViewPage/>}/>
                     <Route path="/outcomedocument" element={<OutcomeDocument currentUser={currentUser}/>}/>
+                    <Route path="/outcomedocument/:id" element={<OutcomeDocumentViewPage/>}/>
+                    <Route path="/archive" element={<ArchivePage currentUser={currentUser}/>}/>
+                    <Route path="/settings/users" element={<UsersPage/>}/>
                 </Route>
             ) : (
                 <Route path="/" element={<LoginPage onLogin={handleLogin}/>}/>
