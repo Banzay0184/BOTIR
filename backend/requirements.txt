@@ -4,8 +4,10 @@ django-cors-headers==4.4.0
 django-filter==24.3
 djangorestframework==3.15.2
 djangorestframework-simplejwt==5.3.1
+dotenv==0.9.9
 future==1.0.0
 PyJWT==2.9.0
+python-dotenv==1.2.1
 serializers==0.2.4
 sqlparse==0.5.1
 typing_extensions==4.12.2
