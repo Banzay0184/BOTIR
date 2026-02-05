@@ -1,6 +1,6 @@
 import React, {useState, useEffect} from 'react';
 import {Typography} from '@material-tailwind/react';
-import {updateMarking, deleteMarking, getProducts, canEdit} from '../api/api';
+import { updateMarking, deleteMarking, getProductsAllPages, canEdit } from '../api/api';
 import MarkingEditModal from './MarkingEditModal.jsx';
 
 const IncomeItemList = ({
@@ -21,11 +21,9 @@ const IncomeItemList = ({
     useEffect(() => {
         const fetchProducts = async () => {
             try {
-                const response = await getProducts();
-                const data = response.data?.results ?? response.data;
-                const list = Array.isArray(data) ? data : [];
-                const productMap = list.reduce((map, product) => {
-                    map[product.id] = {name: product.name, kpi: product.kpi};
+                const list = await getProductsAllPages();
+                const productMap = (Array.isArray(list) ? list : []).reduce((map, product) => {
+                    map[product.id] = { name: product.name, kpi: product.kpi };
                     return map;
                 }, {});
                 setProducts(productMap);

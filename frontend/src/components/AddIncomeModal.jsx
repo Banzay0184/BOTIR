@@ -2,7 +2,7 @@ import React, {useState, useEffect, useRef} from 'react';
 import Select from 'react-select';
 import {Dialog, DialogHeader, DialogBody, DialogFooter, Button, Input} from '@material-tailwind/react';
 import {LockClosedIcon} from '@heroicons/react/24/solid';
-import {createIncome, updateIncome, getIncomeById, getCompanies, getProducts, checkMarkingExists, getApiErrorMessage} from '../api/api';
+import { createIncome, updateIncome, getIncomeById, getCompanies, getProductsAllPages, checkMarkingExists, getApiErrorMessage } from '../api/api';
 import AddCompanyModal from './AddCompanyModal';
 import AddProductModal from './AddProductModal';
 import * as XLSX from 'xlsx';
@@ -60,10 +60,9 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome, income: editIncome, onUpd
 
         const fetchProducts = async () => {
             try {
-                const response = await getProducts();
-                const data = response.data?.results ?? response.data;
-                const productsList = Array.isArray(data) ? data : [];
-                const options = productsList.map(product => ({
+                const productsList = await getProductsAllPages();
+                const list = Array.isArray(productsList) ? productsList : [];
+                const options = list.map(product => ({
                     value: product.id,
                     label: product.name,
                     kpi: product.kpi,

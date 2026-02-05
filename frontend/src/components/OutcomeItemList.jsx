@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Typography } from '@material-tailwind/react';
-import { getProducts } from '../api/api';
+import { getProductsAllPages } from '../api/api';
 
 const OutcomeItemList = ({
                              searchTerm,
@@ -16,10 +16,8 @@ const OutcomeItemList = ({
     useEffect(() => {
         const fetchProducts = async () => {
             try {
-                const response = await getProducts();
-                const data = response.data?.results ?? response.data;
-                const list = Array.isArray(data) ? data : [];
-                const productMap = list.reduce((map, product) => {
+                const list = await getProductsAllPages();
+                const productMap = (Array.isArray(list) ? list : []).reduce((map, product) => {
                     map[product.id] = { name: product.name, kpi: product.kpi };
                     return map;
                 }, {});

@@ -1,6 +1,6 @@
 import React, {useState, useEffect} from 'react';
 import Chart from "react-apexcharts";
-import {getOutcomes, getProducts} from '../api/api'; // Импорт функции getOutcomes и getProducts из вашего API
+import { getOutcomes, getProductsAllPages } from '../api/api';
 
 const OutcomeChart = () => {
     const [chartData, setChartData] = useState({
@@ -12,9 +12,9 @@ const OutcomeChart = () => {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [outcomesResponse, productsResponse] = await Promise.all([getOutcomes(), getProducts()]);
+                const [outcomesResponse, productsList] = await Promise.all([getOutcomes(), getProductsAllPages()]);
                 const outcomes = outcomesResponse.data?.results ?? outcomesResponse.data;
-                const products = productsResponse.data?.results ?? productsResponse.data;
+                const products = Array.isArray(productsList) ? productsList : [];
 
                 if (!Array.isArray(outcomes)) {
                     throw new Error("Invalid response format");

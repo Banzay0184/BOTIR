@@ -1,7 +1,7 @@
 import React, {useState, useEffect} from 'react';
 import {Button} from '@material-tailwind/react';
 import SimpleDialog from './SimpleDialog';
-import {getProducts} from '../api/api';
+import { getProductsAllPages } from '../api/api';
 
 const OutcomeDetails = ({isOpen, onClose, outcome, onShowDocument}) => {
     const [products, setProducts] = useState({});
@@ -10,20 +10,15 @@ const OutcomeDetails = ({isOpen, onClose, outcome, onShowDocument}) => {
         const controller = new AbortController();
         const fetchProducts = async () => {
             try {
-                const response = await getProducts(controller.signal);
-                if (controller.signal.aborted) return;
-                const data = response.data?.results ?? response.data;
-                const list = Array.isArray(data) ? data : [];
-                const productMap = list.reduce((map, product) => {
-                    map[product.id] = {
-                        name: product.name,
-                        price: product.price
-                    };
+                const list = await getProductsAllPages(controller.signal);
+                if (controller.signal?.aborted) return;
+                const productMap = (Array.isArray(list) ? list : []).reduce((map, product) => {
+                    map[product.id] = { name: product.name, price: product.price };
                     return map;
                 }, {});
                 setProducts(productMap);
             } catch (error) {
-                if (controller.signal.aborted) return;
+                if (controller.signal?.aborted) return;
                 console.error('Failed to fetch products:', error);
             }
         };

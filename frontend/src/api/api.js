@@ -103,8 +103,32 @@ axiosInstance.interceptors.response.use(
 export const getCompanies = () => axiosInstance.get('/companies/');
 export const createCompany = (data) => axiosInstance.post('/companies/', data);
 
-export const getProducts = (signal) =>
-    axiosInstance.get('/products/', signal ? { signal } : {});
+/** Запрос товаров (поддержка пагинации: params = { page }). */
+export const getProducts = (signal, params = {}) =>
+    axiosInstance.get('/products/', { ...(signal ? { signal } : {}), params });
+
+/** Ответ API с пагинацией: { count, next, previous, results }. */
+export const getProductsPaginated = (params = {}, signal) =>
+    axiosInstance.get('/products/', { params, ...(signal ? { signal } : {}) });
+
+/** Загрузить все страницы товаров в один массив (для выпадающих списков и карт товаров). */
+export const getProductsAllPages = async (signal) => {
+    const all = [];
+    let page = 1;
+    let hasNext = true;
+    while (hasNext) {
+        const config = { params: { page } };
+        if (signal) config.signal = signal;
+        const response = await axiosInstance.get('/products/', config);
+        const data = response.data;
+        const results = data?.results ?? (Array.isArray(data) ? data : []);
+        all.push(...results);
+        hasNext = Boolean(data?.next);
+        page += 1;
+    }
+    return all;
+};
+
 export const createProduct = (data) => axiosInstance.post('/products/', data);
 
 export const getProductMarkings = () => axiosInstance.get('/product-markings/');

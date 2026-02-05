@@ -1,7 +1,7 @@
 import React, {useState, useEffect} from 'react';
 import Select from 'react-select';
 import {Dialog, DialogHeader, DialogBody, DialogFooter, Button, Input} from '@material-tailwind/react';
-import {createOutcome, getCompanies, getProducts, getApiErrorMessage} from '../api/api';
+import { createOutcome, getCompanies, getProductsAllPages, getApiErrorMessage } from '../api/api';
 import AddCompanyModal from './AddCompanyModal';
 
 const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarkings, setIncomes}) => {
@@ -51,10 +51,9 @@ const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarki
     useEffect(() => {
         const fetchProducts = async () => {
             try {
-                const response = await getProducts();
-                const data = response.data?.results ?? response.data;
-                const list = Array.isArray(data) ? data : [];
-                const productMap = list.reduce((map, product) => {
+                const list = await getProductsAllPages();
+                const arr = Array.isArray(list) ? list : [];
+                const productMap = arr.reduce((map, product) => {
                     map[product.id] = product;
                     return map;
                 }, {});

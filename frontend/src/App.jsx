@@ -52,6 +52,7 @@ function App() {
                     <Route path="/outcomedocument" element={<OutcomeDocument currentUser={currentUser}/>}/>
                     <Route path="/outcomedocument/:id" element={<OutcomeDocumentViewPage/>}/>
                     <Route path="/archive" element={<ArchivePage currentUser={currentUser}/>}/>
+                    <Route path="/products" element={<ProductsPage/>}/>
                     <Route path="/settings/users" element={<UsersPage/>}/>
                 </Route>
             ) : (

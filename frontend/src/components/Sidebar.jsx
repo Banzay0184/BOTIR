@@ -175,6 +175,14 @@ export default function Sidebar({currentUser, onLogout}) {
                                         Информация по расходам
                                     </ListItem>
                                 </Link>
+                                <Link to="/products" onClick={closeSidebar}>
+                                    <ListItem>
+                                        <ListItemPrefix>
+                                            <ChevronRightIcon strokeWidth={3} className="h-3 w-5"/>
+                                        </ListItemPrefix>
+                                        Товары
+                                    </ListItem>
+                                </Link>
                             </List>
                         </AccordionBody>
                     </Accordion>

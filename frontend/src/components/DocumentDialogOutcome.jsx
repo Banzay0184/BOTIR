@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Button } from '@material-tailwind/react';
 import SimpleDialog from './SimpleDialog';
-import { getProducts } from '../api/api.js';
+import { getProductsAllPages } from '../api/api.js';
 
 const DocumentDialogOutcome = ({ isOpen, onClose, outcome }) => {
     const [productDetails, setProductDetails] = useState([]);
@@ -9,12 +9,11 @@ const DocumentDialogOutcome = ({ isOpen, onClose, outcome }) => {
     useEffect(() => {
         const fetchProductDetails = async () => {
             try {
-                const response = await getProducts();
-                const data = response.data?.results ?? response.data;
-                const productsList = Array.isArray(data) ? data : [];
+                const productsList = await getProductsAllPages();
+                const list = Array.isArray(productsList) ? productsList : [];
 
                 const details = outcome.product_markings.reduce((acc, marking) => {
-                    const product = productsList.find((p) => p.id === marking.product);
+                    const product = list.find((p) => p.id === marking.product);
                     if (!product) {
                         console.warn(`Product with ID ${marking.product} not found`);
                         return acc;
