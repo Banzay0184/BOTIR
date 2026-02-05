@@ -110,6 +110,7 @@ class ProductMarkingViewSet(viewsets.ModelViewSet):
 
 class IncomeViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsOperatorOrAdminOrReadOnly]
+    queryset = Income.objects.prefetch_related("income").select_related('from_company', 'added_by').all()
     serializer_class = IncomeSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = IncomeFilter
@@ -193,6 +194,7 @@ class IncomeViewSet(viewsets.ModelViewSet):
 
 
 class OutcomeViewSet(viewsets.ModelViewSet):
+    queryset = Outcome.objects.select_related('to_company', 'added_by').prefetch_related('product_markings').all()
     serializer_class = OutcomeSerializer
     permission_classes = [IsAuthenticated, IsOperatorOrAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend]
