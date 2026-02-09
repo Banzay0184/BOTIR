@@ -79,11 +79,16 @@ class CompanySerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
-    stock = serializers.IntegerField(read_only=True)
+    """stock — из annotate в ProductViewSet; у нового продукта атрибута нет, возвращаем 0."""
+
+    stock = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
         fields = '__all__'
+
+    def get_stock(self, obj):
+        return getattr(obj, 'stock', 0)
 
 
 class ProductSelectSerializer(serializers.ModelSerializer):
