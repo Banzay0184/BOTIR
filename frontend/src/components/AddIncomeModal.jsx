@@ -1,6 +1,7 @@
 import React, {useState, useEffect, useRef} from 'react';
 import Select from 'react-select';
 import AsyncSelect from 'react-select/async';
+import toast from 'react-hot-toast';
 import {Dialog, DialogHeader, DialogBody, DialogFooter, Button, Input} from '@material-tailwind/react';
 import {LockClosedIcon} from '@heroicons/react/24/solid';
 import { createIncome, updateIncome, getIncomeByIdCached, invalidateIncomeByIdCache, getCompaniesCached, getProductsSelect, getProductsSelectCachedFirstPage, checkMarkingsBatch, getApiErrorMessage } from '../api/api';
@@ -534,7 +535,20 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome, income: editIncome, onUpd
                 onClose();
             }
         } catch (error) {
-            setError(getApiErrorMessage(error));
+            const status = error.response?.status;
+            const isNetwork = !error.response || error.code === 'ERR_NETWORK';
+            const isSessionExpired = status === 401 || status === 400;
+            if (isSessionExpired) {
+                toast.error('Сессия истекла, войдите снова');
+                setError('Сессия истекла, войдите снова');
+            } else if (isNetwork) {
+                toast.error('Проблемы с интернетом, попробуйте ещё раз');
+                setError('Проблемы с интернетом, попробуйте ещё раз');
+            } else {
+                const msg = getApiErrorMessage(error);
+                setError(msg);
+                toast.error(msg);
+            }
             console.error(isEditMode ? 'Error updating income:' : 'Error adding income:', error.response?.data ?? error.message);
         } finally {
             setIsSaving(false);

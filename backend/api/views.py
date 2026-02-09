@@ -6,6 +6,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
+from rest_framework_simplejwt.settings import api_settings as jwt_api_settings
 from rest_framework.decorators import api_view, action, permission_classes as perm_classes
 from .serializers import CustomUserSerializer
 from django.contrib.auth import get_user_model
@@ -438,11 +439,15 @@ class MyTokenRefreshSerializer(TokenRefreshSerializer):
     """Добавляем groups в ответ refresh для UI (безопасность — по request.user.groups)."""
 
     def validate(self, attrs):
-        data = super().validate(attrs)
+        # Получаем user_id до super().validate(): после него токен попадёт в blacklist,
+        # и повторный RefreshToken(attrs['refresh']) вызовет TokenError при verify().
         refresh = RefreshToken(attrs['refresh'])
-        user_id = refresh.get('user_id')
+        user_id = refresh.payload.get(jwt_api_settings.USER_ID_CLAIM)
+
+        data = super().validate(attrs)
+
         if user_id:
-            user = get_user_model().objects.filter(pk=user_id).first()
+            user = get_user_model().objects.filter(**{jwt_api_settings.USER_ID_FIELD: user_id}).first()
             if user:
                 data['groups'] = [g.name for g in user.groups.all()]
                 data['is_superuser'] = user.is_superuser

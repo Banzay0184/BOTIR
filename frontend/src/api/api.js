@@ -77,46 +77,62 @@ axiosInstance.interceptors.request.use(
     (error) => Promise.reject(error)
 );
 
-// Response Interceptor: 401 → refresh (ROTATE_REFRESH_TOKENS) → save new access + new refresh → retry
+/** Один refresh на всех: если refresh уже идёт — остальные ждут его, не запуская новый. */
+let refreshPromise = null;
+
+// Response Interceptor: 401 → single-flight refresh (raw axios) → retry; на логин только при 401/400 token invalid
 axiosInstance.interceptors.response.use(
     (response) => response,
     async (error) => {
         const originalRequest = error.config;
-        if (error.response?.status === 401 && !originalRequest._retry) {
-            originalRequest._retry = true;
-            const user = JSON.parse(sessionStorage.getItem('user'));
-
-            if (!user?.refreshToken) {
-                return Promise.reject(error);
-            }
-
-            try {
-                const { data } = await axios.post(`${API_URL}/token/refresh/`, {
-                    refresh: user.refreshToken,
-                });
-
-                if (!data.access) {
-                    return Promise.reject(error);
-                }
-
-                // ROTATE_REFRESH_TOKENS: сервер отдаёт новый refresh — сохраняем оба + groups для UI
-                const updatedUser = {
-                    ...user,
-                    accessToken: data.access,
-                    refreshToken: data.refresh ?? user.refreshToken,
-                    ...(Array.isArray(data.groups) && { groups: data.groups }),
-                    ...(typeof data.is_superuser === 'boolean' && { is_superuser: data.is_superuser }),
-                };
-                sessionStorage.setItem('user', JSON.stringify(updatedUser));
-                originalRequest.headers['Authorization'] = `Bearer ${data.access}`;
-                return axiosInstance(originalRequest);
-            } catch (refreshError) {
-                console.error('Failed to refresh token:', refreshError);
-                clearSessionAndRedirect();
-                return Promise.reject(refreshError);
-            }
+        if (error.response?.status !== 401 || originalRequest._retry) {
+            return Promise.reject(error);
         }
-        return Promise.reject(error);
+        originalRequest._retry = true;
+        const user = JSON.parse(sessionStorage.getItem('user'));
+        if (!user?.refreshToken) {
+            return Promise.reject(error);
+        }
+
+        if (!refreshPromise) {
+            refreshPromise = (async () => {
+                try {
+                    const { data } = await axios.post(`${API_URL}/token/refresh/`, {
+                        refresh: user.refreshToken,
+                    });
+                    if (!data.access) throw new Error('No access token in refresh response');
+                    const updatedUser = {
+                        ...user,
+                        accessToken: data.access,
+                        refreshToken: data.refresh ?? user.refreshToken,
+                        ...(Array.isArray(data.groups) && { groups: data.groups }),
+                        ...(typeof data.is_superuser === 'boolean' && { is_superuser: data.is_superuser }),
+                    };
+                    sessionStorage.setItem('user', JSON.stringify(updatedUser));
+                    return data.access;
+                } catch (refreshError) {
+                    const status = refreshError.response?.status;
+                    const isTokenInvalid = status === 401 || status === 400;
+                    if (isTokenInvalid) {
+                        console.error('Refresh token invalid or expired:', refreshError.response?.data ?? refreshError);
+                        clearSessionAndRedirect();
+                    } else {
+                        console.error('Failed to refresh token (network/5xx):', refreshError.message ?? refreshError);
+                    }
+                    throw refreshError;
+                } finally {
+                    refreshPromise = null;
+                }
+            })();
+        }
+
+        try {
+            const newAccess = await refreshPromise;
+            originalRequest.headers['Authorization'] = `Bearer ${newAccess}`;
+            return axiosInstance(originalRequest);
+        } catch (refreshErr) {
+            return Promise.reject(refreshErr);
+        }
     }
 );
 

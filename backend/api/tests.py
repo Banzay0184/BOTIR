@@ -480,3 +480,52 @@ class WrittenOffMarkingNoUpdateDeleteTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data.get('error', {}).get('code'), 'MARKING_WRITTEN_OFF')
         self.assertTrue(ProductMarking.objects.filter(id=self.marking.id).exists())
+
+
+class TokenRefreshContractTest(TestCase):
+    """
+    Контракт refresh для фронта: 401/400 = «сессия истекла», редирект на логин.
+    Сеть/5xx = не редиректить. Этот тест фиксирует: невалидный refresh → 401.
+    """
+
+    def setUp(self):
+        Group.objects.get_or_create(name='operator')
+        self.user = create_user('refresh_test_user', 'pass', 'operator')
+        self.client = APIClient()
+
+    def test_refresh_with_invalid_token_returns_401(self):
+        """Невалидный или пустой refresh → 401. Фронт по 401/400 показывает «Сессия истекла» и редирект."""
+        response = self.client.post(
+            '/api/v1/token/refresh/',
+            {'refresh': 'invalid-or-expired-token'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_refresh_with_missing_refresh_returns_400(self):
+        """Без поля refresh → 400. Фронт трактует 400 от refresh как «сессия истекла»."""
+        response = self.client.post(
+            '/api/v1/token/refresh/',
+            {},
+            format='json',
+        )
+        self.assertIn(response.status_code, (status.HTTP_400_BAD_REQUEST, status.HTTP_401_UNAUTHORIZED))
+
+    def test_refresh_with_valid_token_returns_200_and_access(self):
+        """Валидный refresh → 200 и access в ответе. Регрессия: не сломать успешный refresh."""
+        login_response = self.client.post(
+            '/api/v1/token/',
+            {'username': 'refresh_test_user', 'password': 'pass'},
+            format='json',
+        )
+        self.assertEqual(login_response.status_code, status.HTTP_200_OK)
+        refresh = login_response.data.get('refresh')
+        self.assertTrue(refresh, 'login must return refresh token')
+        response = self.client.post(
+            '/api/v1/token/refresh/',
+            {'refresh': refresh},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('access', response.data)
+        self.assertTrue(response.data['access'], 'must return new access token')
