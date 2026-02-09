@@ -27,6 +27,28 @@ export const getApiErrorMessage = (err) => getApiError(err).message;
 export const getApiErrorCode = (err) => getApiError(err).code;
 export const getApiErrorDetails = (err) => getApiError(err).details;
 
+const MAX_DETAIL_ITEMS = 10;
+
+/**
+ * Для VALIDATION_ERROR и подобных: details может быть объектом с массивами строк
+ * (например product_markings: ["Маркировка уже списана: X", ...]).
+ * Возвращает плоский список строк (первые MAX_DETAIL_ITEMS) для отображения списком в UI.
+ */
+export const getApiErrorDetailsAsList = (err) => {
+    const details = getApiError(err).details;
+    if (details == null || typeof details !== 'object') return [];
+    const list = [];
+    for (const value of Object.values(details)) {
+        if (Array.isArray(value)) {
+            for (const item of value) {
+                if (typeof item === 'string') list.push(item);
+                if (list.length >= MAX_DETAIL_ITEMS) return list;
+            }
+        }
+    }
+    return list;
+};
+
 
 const axiosInstance = axios.create({
     baseURL: API_URL,
@@ -99,24 +121,79 @@ axiosInstance.interceptors.response.use(
 );
 
 // API Functions
+// Контракт: list — (params = {}, signal), getById — (id, signal). Не путать порядок аргументов.
 
 export const getCompanies = () => axiosInstance.get('/companies/');
-export const createCompany = (data) => axiosInstance.post('/companies/', data);
 
-/** Запрос товаров (поддержка пагинации: params = { page }). */
-export const getProducts = (signal, params = {}) =>
-    axiosInstance.get('/products/', { ...(signal ? { signal } : {}), params });
+let _companiesCache = null;
+let _companiesPromise = null;
 
-/** Ответ API с пагинацией: { count, next, previous, results }. */
+/**
+ * Список компаний с кэшем (один запрос на сессию, без дубликатов при повторном открытии модалки).
+ * Сброс кэша: после createCompany или перезагрузка страницы.
+ */
+export const getCompaniesCached = async () => {
+    if (Array.isArray(_companiesCache) && _companiesCache.length > 0) return { data: _companiesCache };
+    if (_companiesPromise) return _companiesPromise;
+    _companiesPromise = getCompanies()
+        .then((res) => {
+            const raw = res.data;
+            const list = Array.isArray(raw) ? raw : (raw?.results ?? []);
+            _companiesCache = Array.isArray(list) ? list : [];
+            return { data: _companiesCache };
+        })
+        .finally(() => {
+            _companiesPromise = null;
+        });
+    return _companiesPromise;
+};
+
+export const invalidateCompaniesCache = () => {
+    _companiesCache = null;
+    _companiesPromise = null;
+};
+
+export const createCompany = (data) => axiosInstance.post('/companies/', data).then((res) => {
+    invalidateCompaniesCache();
+    return res;
+});
+
+/** Список товаров. Контракт list: (params, signal). */
+export const getProducts = (params = {}, signal) =>
+    axiosInstance.get('/products/', { params, ...(signal ? { signal } : {}) });
+
+/** Список товаров с пагинацией. (params, signal). */
 export const getProductsPaginated = (params = {}, signal) =>
     axiosInstance.get('/products/', { params, ...(signal ? { signal } : {}) });
 
-/**
- * Быстрый список товаров для селектов (без тяжёлых вычислений на бэке).
- * params: { q, page }
- */
+/** Список товаров для селектов. (params, signal), params: { q, page }. */
 export const getProductsSelect = (params = {}, signal) =>
     axiosInstance.get('/products/select/', { params, ...(signal ? { signal } : {}) });
+
+let _productsSelectFirstPageCache = null;
+let _productsSelectFirstPagePromise = null;
+
+/**
+ * Первая страница products/select с кэшем (для модалки прихода — без повторного запроса при открытии).
+ */
+export const getProductsSelectCachedFirstPage = async (signal) => {
+    if (_productsSelectFirstPageCache != null) return { data: _productsSelectFirstPageCache };
+    if (_productsSelectFirstPagePromise) return _productsSelectFirstPagePromise;
+    _productsSelectFirstPagePromise = getProductsSelect({ page: 1 }, signal)
+        .then((res) => {
+            _productsSelectFirstPageCache = res.data;
+            return { data: _productsSelectFirstPageCache };
+        })
+        .finally(() => {
+            _productsSelectFirstPagePromise = null;
+        });
+    return _productsSelectFirstPagePromise;
+};
+
+export const invalidateProductsSelectFirstPageCache = () => {
+    _productsSelectFirstPageCache = null;
+    _productsSelectFirstPagePromise = null;
+};
 
 /** Загрузить все страницы товаров в один массив (для выпадающих списков и карт товаров). */
 export const getProductsAllPages = async (signal) => {
@@ -164,23 +241,46 @@ export const createProduct = (data) => axiosInstance.post('/products/', data);
 export const getProductMarkings = () => axiosInstance.get('/product-markings/');
 export const createProductMarking = (data) => axiosInstance.post('/product-markings/', data);
 
-/**
- * Получить доступные (не списанные) маркировки для главного склада.
- * params: { search, page }
- */
+/** Список доступных маркировок (склад). (params, signal), params: { search, page }. */
 export const getAvailableMarkings = (params = {}, signal) =>
     axiosInstance.get('/product-markings/available/', { 
         params, 
         ...(signal ? { signal } : {}) 
     });
 
-export const getDashboardStats = (year, signal) =>
-    axiosInstance.get('/stats/dashboard/', { params: year != null ? { year } : {}, ...(signal ? { signal } : {}) });
-
-export const getIncomes = (signal, params = {}) =>
-    axiosInstance.get('/incomes/', { ...(signal ? { signal } : {}), params });
+/** Список приходов. (params, signal). */
+export const getIncomes = (params = {}, signal) =>
+    axiosInstance.get('/incomes/', { params, ...(signal ? { signal } : {}) });
+/** Один приход по id. (id, signal). */
 export const getIncomeById = (id, signal) =>
     axiosInstance.get(`/incomes/${id}/`, signal ? { signal } : {});
+
+const _incomeByIdCache = { id: null, data: null, ts: 0 };
+const INCOME_BY_ID_CACHE_TTL_MS = 3000;
+
+/**
+ * Кэш на несколько секунд, чтобы при двойном вызове эффекта (StrictMode) не дублировать GET /incomes/:id/.
+ */
+export const getIncomeByIdCached = async (id, signal) => {
+    const now = Date.now();
+    if (_incomeByIdCache.id === id && _incomeByIdCache.data != null && now - _incomeByIdCache.ts < INCOME_BY_ID_CACHE_TTL_MS) {
+        return { data: _incomeByIdCache.data };
+    }
+    const res = await getIncomeById(id, signal);
+    _incomeByIdCache.id = id;
+    _incomeByIdCache.data = res.data;
+    _incomeByIdCache.ts = Date.now();
+    return res;
+};
+
+export const invalidateIncomeByIdCache = (id) => {
+    if (id == null || _incomeByIdCache.id === id) {
+        _incomeByIdCache.id = null;
+        _incomeByIdCache.data = null;
+        _incomeByIdCache.ts = 0;
+    }
+};
+
 export const createIncome = (data) => axiosInstance.post('/incomes/', data);
 
 export const updateMarking = async (incomeId, productId, markingId, newMarking, newMarkingCounter) => {
@@ -198,10 +298,59 @@ export const updateMarking = async (incomeId, productId, markingId, newMarking, 
 
 export const checkMarkingExists = (marking) => axiosInstance.get(`/product-markings/check-marking/${marking}/`);
 
+/**
+ * Проверка маркировок пачкой. Один запрос вместо N.
+ * Body: { markings: string[] }
+ * Response: { exists: string[], duplicates: string[] }
+ */
+export const checkMarkingsBatch = (markings) =>
+    axiosInstance.post('/product-markings/check/', { markings });
+
+/** Список расходов. (params, signal). */
 export const getOutcomes = (params = {}, signal) =>
     axiosInstance.get('/outcomes/', { params, ...(signal ? { signal } : {}) });
+/** Один расход по id. (id, signal). */
 export const getOutcomeById = (id, signal) =>
     axiosInstance.get(`/outcomes/${id}/`, signal ? { signal } : {});
+
+const _outcomeByIdCache = { id: null, data: null, ts: 0 };
+const OUTCOME_BY_ID_CACHE_TTL_MS = 3000;
+/** Один запрос на id: при двойном вызове (например Strict Mode) возвращаем тот же промис. */
+let _outcomeByIdInFlight = null;
+
+export const getOutcomeByIdCached = async (id, signal) => {
+    const now = Date.now();
+    if (_outcomeByIdCache.id === id && _outcomeByIdCache.data != null && now - _outcomeByIdCache.ts < OUTCOME_BY_ID_CACHE_TTL_MS) {
+        return { data: _outcomeByIdCache.data };
+    }
+    if (_outcomeByIdInFlight && _outcomeByIdInFlight.id === id) {
+        return _outcomeByIdInFlight.promise;
+    }
+    const promise = getOutcomeById(id, signal)
+        .then((res) => {
+            _outcomeByIdCache.id = id;
+            _outcomeByIdCache.data = res.data;
+            _outcomeByIdCache.ts = Date.now();
+            return res;
+        })
+        .finally(() => {
+            if (_outcomeByIdInFlight && _outcomeByIdInFlight.id === id) _outcomeByIdInFlight = null;
+        });
+    _outcomeByIdInFlight = { id, promise };
+    return promise;
+};
+
+export const invalidateOutcomeByIdCache = (id) => {
+    if (id == null || _outcomeByIdCache.id === id) {
+        _outcomeByIdCache.id = null;
+        _outcomeByIdCache.data = null;
+        _outcomeByIdCache.ts = 0;
+    }
+    if (id == null || (_outcomeByIdInFlight && _outcomeByIdInFlight.id === id)) {
+        _outcomeByIdInFlight = null;
+    }
+};
+
 export const createOutcome = (data) => axiosInstance.post('/outcomes/', data);
 
 export const updateIncome = async (incomeId, updatedData) => {

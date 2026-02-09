@@ -1,5 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { Toaster } from 'react-hot-toast'
 import App from './App.jsx'
 import './index.css'
 import {ThemeProvider} from "@material-tailwind/react";
@@ -11,6 +12,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <BrowserRouter>
             <ThemeProvider>
                 <App/>
+                <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
             </ThemeProvider>
         </BrowserRouter>
     </React.StrictMode>,

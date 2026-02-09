@@ -1,7 +1,7 @@
 import React, {useState, useEffect} from 'react';
 import Select from 'react-select';
 import {Dialog, DialogHeader, DialogBody, DialogFooter, Button, Input} from '@material-tailwind/react';
-import { createOutcome, getCompanies, getApiErrorMessage } from '../api/api';
+import { createOutcome, getCompanies, getApiErrorMessage, getApiErrorDetailsAsList } from '../api/api';
 import AddCompanyModal from './AddCompanyModal';
 
 const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarkings, setMarkings}) => {
@@ -23,6 +23,7 @@ const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarki
     const [companyOptions, setCompanyOptions] = useState([]);
     const [isAddCompanyModalOpen, setIsAddCompanyModalOpen] = useState(false);
     const [error, setError] = useState('');
+    const [errorDetailsList, setErrorDetailsList] = useState([]);
     const [manualTotal, setManualTotal] = useState(false);
     const [isSaving, setIsSaving] = useState(false); // Состояние для отслеживания процесса сохранения
 
@@ -118,6 +119,7 @@ const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarki
 
         if (outcomeData.product_markings.length === 0) {
             setError('Не выбрана ни одна маркировка.');
+            setErrorDetailsList([]);
             setIsSaving(false);
             return;
         }
@@ -135,9 +137,10 @@ const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarki
 
             setSelectedMarkings([]); // Сбрасываем выбранные markings
             onClose(); // Закрываем модальное окно
-        } catch (error) {
-            setError(getApiErrorMessage(error));
-            console.error('Error creating outcome:', error.response?.data ?? error.message);
+        } catch (err) {
+            setError(getApiErrorMessage(err));
+            setErrorDetailsList(getApiErrorDetailsAsList(err));
+            console.error('Error creating outcome:', err.response?.data ?? err.message);
         } finally {
             setIsSaving(false); // Окончание процесса сохранения
         }
@@ -291,7 +294,18 @@ const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarki
                             />
                         </div>
                     </form>
-                    {error && <div className="text-red-500 mt-2 text-center">{error}</div>}
+                    {error && (
+                        <div className="text-red-500 mt-2 text-center">
+                            <p>{error}</p>
+                            {errorDetailsList.length > 0 && (
+                                <ul className="list-disc list-inside text-left mt-2 text-sm" aria-label="Детали ошибки">
+                                    {errorDetailsList.map((item, idx) => (
+                                        <li key={idx}>{item}</li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    )}
                 </DialogBody>
                 <DialogFooter className=' flex justify-end space-x-2'>
                     <Button

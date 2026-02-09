@@ -30,11 +30,15 @@ class Product(models.Model):
         return self.name
 
 
+# Складовые индексы: outcome_id (фильтр "свободные"), income_id, product_id — db_index=True.
+# Поиск по marking: при росте данных в Postgres можно добавить pg_trgm + GIN.
+
+
 class ProductMarking(models.Model):
     marking = models.CharField(max_length=255, unique=True)
     counter = models.BooleanField(default=False, null=True, blank=True)
     income = models.ForeignKey(
-        "Income", on_delete=models.CASCADE, related_name="income", null=True, blank=True
+        "Income", on_delete=models.CASCADE, related_name="income", null=True, blank=True, db_index=True
     )
     outcome = models.ForeignKey(
         "Outcome", on_delete=models.PROTECT, related_name="product_markings", null=True, blank=True, db_index=True

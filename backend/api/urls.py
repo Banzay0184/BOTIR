@@ -4,7 +4,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     CompanyViewSet, ProductViewSet, ProductMarkingViewSet, IncomeViewSet, OutcomeViewSet,
     UpdateMarkingView, MyTokenObtainPairView, MyTokenRefreshView, RegisterView, logout_view,
-    check_marking_exists, dashboard_stats,
+    check_marking_exists, check_markings_batch, dashboard_stats,
     AdminUserViewSet, AdminRoleViewSet, AdminResetPasswordView,
 )
 
@@ -20,6 +20,7 @@ admin_router.register(r'users', AdminUserViewSet, basename='admin-users')
 admin_router.register(r'roles', AdminRoleViewSet, basename='admin-roles')
 
 urlpatterns = [
+    path('product-markings/check/', check_markings_batch, name='check-markings-batch'),
     path('', include(router.urls)),
     path('stats/dashboard/', dashboard_stats, name='dashboard-stats'),
     path('admin/', include(admin_router.urls)),

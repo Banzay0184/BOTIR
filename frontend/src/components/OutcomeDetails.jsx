@@ -18,7 +18,7 @@ const OutcomeDetails = ({isOpen, onClose, outcome, onShowDocument}) => {
                 }, {});
                 setProducts(productMap);
             } catch (error) {
-                if (controller.signal?.aborted) return;
+                if (controller.signal?.aborted || error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return;
                 console.error('Failed to fetch products:', error);
             }
         };

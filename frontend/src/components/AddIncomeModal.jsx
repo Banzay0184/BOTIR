@@ -3,7 +3,7 @@ import Select from 'react-select';
 import AsyncSelect from 'react-select/async';
 import {Dialog, DialogHeader, DialogBody, DialogFooter, Button, Input} from '@material-tailwind/react';
 import {LockClosedIcon} from '@heroicons/react/24/solid';
-import { createIncome, updateIncome, getIncomeById, getCompanies, getProductsSelect, checkMarkingExists, getApiErrorMessage } from '../api/api';
+import { createIncome, updateIncome, getIncomeByIdCached, invalidateIncomeByIdCache, getCompaniesCached, getProductsSelect, getProductsSelectCachedFirstPage, checkMarkingsBatch, getApiErrorMessage } from '../api/api';
 import AddCompanyModal from './AddCompanyModal';
 import AddProductModal from './AddProductModal';
 import * as XLSX from 'xlsx';
@@ -40,8 +40,8 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome, income: editIncome, onUpd
 
         const fetchCompanies = async () => {
             try {
-                const response = await getCompanies();
-                const options = response.data.map(company => ({
+                const response = await getCompaniesCached();
+                const options = (response.data ?? []).map(company => ({
                     value: company.id,
                     label: company.name,
                     phone: company.phone,
@@ -61,8 +61,7 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome, income: editIncome, onUpd
 
         const fetchProducts = async () => {
             try {
-                // Быстрый дефолтный список (первая страница). Поиск работает через AsyncSelect.
-                const response = await getProductsSelect({ page: 1 });
+                const response = await getProductsSelectCachedFirstPage();
                 const list = response.data?.results ?? response.data ?? [];
                 const options = (Array.isArray(list) ? list : []).map(product => ({
                     value: product.id,
@@ -82,13 +81,11 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome, income: editIncome, onUpd
             }
         };
 
-        fetchCompanies();
-        fetchProducts();
-
-        if (isEditMode && editIncome?.id) {
-            const controller = new AbortController();
-            getIncomeById(editIncome.id, controller.signal)
-                .then((res) => {
+        const run = async () => {
+            await Promise.all([fetchCompanies(), fetchProducts()]);
+            if (isEditMode && editIncome?.id) {
+                try {
+                    const res = await getIncomeByIdCached(editIncome.id);
                     const inc = res.data;
                     const productMarkings = inc.product_markings ?? [];
                     const byProduct = {};
@@ -156,33 +153,35 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome, income: editIncome, onUpd
                         products: products.length ? products : [{ id: '', name: '', kpi: '', price: '', quantity: '', markings: [] }],
                     });
                     setError('');
-                })
-                .catch((err) => {
+                } catch (err) {
                     if (err.name !== 'CanceledError' && err.name !== 'AbortError') {
                         setError(getApiErrorMessage(err));
                     }
-                });
-            return () => controller.abort();
-        }
+                }
+            }
 
-        if (!isEditMode) {
-            setFormData(emptyForm());
-            initialMarkingValuesRef.current = new Set();
-            setError('');
-            setManualTotal(false);
-            setFileInputKey(Date.now());
-        }
+            if (!isEditMode) {
+                setFormData(emptyForm());
+                initialMarkingValuesRef.current = new Set();
+                setError('');
+                setManualTotal(false);
+                setFileInputKey(Date.now());
+            }
+        };
+
+        run();
     }, [isOpen, isEditMode, editIncome?.id]);
 
     const handleCompanyChange = (selectedOption) => {
+        if (!selectedOption) return;
         const selectedCompany = companyOptions.find(company => company.value === selectedOption.value);
         setFormData((prevData) => ({
             ...prevData,
             from_company: {
                 id: selectedOption.value,
-                name: selectedCompany.label,
-                phone: selectedCompany.phone,
-                inn: selectedCompany.inn,
+                name: selectedCompany?.label ?? selectedOption.label ?? '',
+                phone: selectedCompany?.phone ?? '',
+                inn: selectedCompany?.inn ?? '',
             },
         }));
     };
@@ -427,26 +426,41 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome, income: editIncome, onUpd
     };
 
     const checkDuplicateMarkings = async () => {
-        const errors = {};
         const existingOnThisDoc = initialMarkingValuesRef.current;
-        for (let i = 0; i < formData.products.length; i++) {
-            for (let j = 0; j < formData.products[i].markings.length; j++) {
-                const marking = formData.products[i].markings[j].marking;
-                if (!marking) continue;
-                const key = String(marking).trim();
-                if (isEditMode && existingOnThisDoc.has(key)) continue;
-                try {
-                    const response = await checkMarkingExists(marking);
-                    if (response.data.exists) {
-                        errors[`${i}-${j}`] = `Маркировка "${marking}" уже существует в базе данных.`;
-                    }
-                } catch (error) {
-                    console.error('Ошибка проверки маркировки:', error);
-                }
-            }
+        const items = [];
+        formData.products.forEach((product, productIndex) => {
+            product.markings.forEach((markingObj, markingIndex) => {
+                const m = String(markingObj?.marking ?? '').trim();
+                if (!m) return;
+                if (isEditMode && existingOnThisDoc.has(m)) return;
+                items.push({ marking: m, productIndex, markingIndex });
+            });
+        });
+        if (items.length === 0) {
+            setMarkingErrors({});
+            return true;
         }
-        setMarkingErrors(errors);
-        return Object.keys(errors).length === 0;
+        try {
+            const response = await checkMarkingsBatch(items.map((i) => i.marking));
+            const { exists = [], duplicates = [] } = response.data ?? {};
+            const errors = {};
+            exists.forEach((m) => {
+                items.filter((it) => it.marking === m).forEach(({ productIndex, markingIndex }) => {
+                    errors[`${productIndex}-${markingIndex}`] = `Маркировка "${m}" уже существует в базе данных.`;
+                });
+            });
+            duplicates.forEach((m) => {
+                items.filter((it) => it.marking === m).forEach(({ productIndex, markingIndex }) => {
+                    errors[`${productIndex}-${markingIndex}`] = `Маркировка "${m}" повторяется в форме.`;
+                });
+            });
+            setMarkingErrors(errors);
+            return Object.keys(errors).length === 0;
+        } catch (error) {
+            console.error('Ошибка проверки маркировок:', error);
+            setError(getApiErrorMessage(error));
+            return false;
+        }
     };
 
     const filterProducts = (products) => {
@@ -510,8 +524,9 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome, income: editIncome, onUpd
         setIsSaving(true);
         try {
             if (isEditMode) {
-                const response = await updateIncome(editIncome.id, payload);
-                onUpdateIncome?.(response.data);
+                const updated = await updateIncome(editIncome.id, payload);
+                invalidateIncomeByIdCache(editIncome.id);
+                onUpdateIncome?.(updated);
                 onClose();
             } else {
                 const response = await createIncome(payload);
@@ -551,6 +566,9 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome, income: editIncome, onUpd
                                             ? { value: formData.from_company.id, label: formData.from_company.name }
                                             : null)
                                     }
+                                    menuPortalTarget={document.body}
+                                    menuPosition="fixed"
+                                    styles={{ menuPortal: (base) => ({ ...base, zIndex: 10000 }) }}
                                 />
                             </div>
                             <Button
@@ -661,6 +679,9 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome, income: editIncome, onUpd
                                                     ? { value: formData.products[index].id, label: formData.products[index].name }
                                                     : null)
                                             }
+                                            menuPortalTarget={document.body}
+                                            menuPosition="fixed"
+                                            styles={{ menuPortal: (base) => ({ ...base, zIndex: 10000 }) }}
                                         />
                                     </div>
                                     <Button

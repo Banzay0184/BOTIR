@@ -209,6 +209,65 @@ class DeleteOnlyWhenArchivedTest(TestCase):
         response = self.client.delete(f'/api/v1/outcomes/{self.outcome_archived.id}/')
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
 
+    def test_cannot_put_archived_income(self):
+        """Архивный приход: PUT → 400 (редактирование запрещено)."""
+        data = {
+            'from_company': {'name': self.company.name, 'phone': self.company.phone, 'inn': self.company.inn},
+            'contract_date': '2024-01-01',
+            'contract_number': 'A1',
+            'invoice_date': '2024-01-01',
+            'invoice_number': 'A1',
+            'unit_of_measure': 'шт',
+            'total': 100.0,
+            'products': [],
+        }
+        response = self.client.put(
+            f'/api/v1/incomes/{self.income_archived.id}/',
+            data,
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data.get('error', {}).get('code'), 'ARCHIVED')
+
+    def test_cannot_patch_archived_income(self):
+        """Архивный приход: PATCH → 400 (редактирование запрещено)."""
+        response = self.client.patch(
+            f'/api/v1/incomes/{self.income_archived.id}/',
+            {'contract_number': 'changed'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data.get('error', {}).get('code'), 'ARCHIVED')
+
+    def test_cannot_put_archived_outcome(self):
+        """Архивный расход: PUT → 400 (редактирование запрещено)."""
+        data = {
+            'to_company': {'name': self.to_company.name, 'phone': self.to_company.phone, 'inn': self.to_company.inn},
+            'contract_date': '2024-01-01',
+            'contract_number': 'OA1',
+            'invoice_date': '2024-01-01',
+            'invoice_number': 'OA1',
+            'unit_of_measure': 'шт',
+            'total': 50.0,
+        }
+        response = self.client.put(
+            f'/api/v1/outcomes/{self.outcome_archived.id}/',
+            data,
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data.get('error', {}).get('code'), 'ARCHIVED')
+
+    def test_cannot_patch_archived_outcome(self):
+        """Архивный расход: PATCH → 400 (редактирование запрещено)."""
+        response = self.client.patch(
+            f'/api/v1/outcomes/{self.outcome_archived.id}/',
+            {'contract_number': 'changed'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data.get('error', {}).get('code'), 'ARCHIVED')
+
 
 class ProductStockTest(TestCase):
     """stock = число ProductMarking у продукта с outcome IS NULL."""
@@ -253,3 +312,171 @@ class ProductStockTest(TestCase):
         expected_free = ProductMarking.objects.filter(product=self.product, outcome__isnull=True).count()
         self.assertEqual(expected_free, 2)
         self.assertEqual(product_with_stock.stock, expected_free)
+
+
+class OutcomeUpdateAtomicTest(TestCase):
+    """Атомарность update расхода: конфликт при привязке уже списанной маркировки; detach/attach не сносит маркировки."""
+
+    def setUp(self):
+        Group.objects.get_or_create(name='operator')
+        self.operator = create_user('operator_outcome_atomic', 'pass', 'operator')
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.operator)
+        self.company = Company.objects.create(name='OutCo', phone='1', inn='1')
+        self.to_company = Company.objects.create(name='ToCo', phone='2', inn='2')
+        self.product = Product.objects.create(name='P', price=1.0, kpi='k')
+        self.income = Income.objects.create(
+            from_company=self.company,
+            contract_date='2024-01-01',
+            contract_number='I1',
+            invoice_date='2024-01-01',
+            invoice_number='I1',
+            unit_of_measure='шт',
+            total=100.0,
+            is_archive=False,
+        )
+        self.m1 = ProductMarking.objects.create(marking='OM1', income=self.income, product=self.product)
+        self.m2 = ProductMarking.objects.create(marking='OM2', income=self.income, product=self.product)
+        self.m3 = ProductMarking.objects.create(marking='OM3', income=self.income, product=self.product)
+
+    def test_update_attach_already_written_off_marking_fails(self):
+        """Привязка к расходу маркировки, уже списанной в другом расходе → 400 и список конфликтных."""
+        outcome_a = Outcome.objects.create(
+            to_company=self.to_company,
+            contract_date='2024-01-01',
+            contract_number='OA',
+            invoice_date='2024-01-01',
+            invoice_number='OA',
+            unit_of_measure='шт',
+            total=10.0,
+            is_archive=False,
+        )
+        outcome_b = Outcome.objects.create(
+            to_company=self.to_company,
+            contract_date='2024-01-01',
+            contract_number='OB',
+            invoice_date='2024-01-01',
+            invoice_number='OB',
+            unit_of_measure='шт',
+            total=10.0,
+            is_archive=False,
+        )
+        ProductMarking.objects.filter(id=self.m1.id).update(outcome=outcome_a)
+        ProductMarking.objects.filter(id=self.m2.id).update(outcome=outcome_b)
+        # Пытаемся в outcome_a добавить m2 (уже на outcome_b) → конфликт
+        payload = {
+            'to_company': {'name': self.to_company.name, 'phone': self.to_company.phone, 'inn': self.to_company.inn},
+            'contract_date': '2024-01-01',
+            'contract_number': 'OA',
+            'invoice_date': '2024-01-01',
+            'invoice_number': 'OA',
+            'unit_of_measure': 'шт',
+            'total': 10.0,
+            'product_markings': [self.m1.id, self.m2.id],
+        }
+        response = self.client.put(
+            f'/api/v1/outcomes/{outcome_a.id}/',
+            payload,
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        # Единый формат ошибок: error.details.product_markings
+        details = response.data.get('error', {}).get('details') or response.data
+        self.assertIn('product_markings', details)
+        self.m1.refresh_from_db()
+        self.m2.refresh_from_db()
+        self.assertEqual(self.m1.outcome_id, outcome_a.id)
+        self.assertEqual(self.m2.outcome_id, outcome_b.id)
+
+    def test_update_detach_attach_sync(self):
+        """PATCH: меняем номер счёта и список маркировок (detach одну, attach другую) — маркировки в консистентном состоянии."""
+        outcome = Outcome.objects.create(
+            to_company=self.to_company,
+            contract_date='2024-01-01',
+            contract_number='OC',
+            invoice_date='2024-01-01',
+            invoice_number='OC',
+            unit_of_measure='шт',
+            total=10.0,
+            is_archive=False,
+        )
+        ProductMarking.objects.filter(id__in=[self.m1.id, self.m2.id]).update(outcome=outcome)
+        # PATCH: оставить m1, отвязать m2, привязать m3 + поменять номер счёта
+        payload = {
+            'to_company': {'name': self.to_company.name, 'phone': self.to_company.phone, 'inn': self.to_company.inn},
+            'contract_date': '2024-01-01',
+            'contract_number': 'OC',
+            'invoice_date': '2024-01-01',
+            'invoice_number': 'OC-UPD',
+            'unit_of_measure': 'шт',
+            'total': 10.0,
+            'product_markings': [self.m1.id, self.m3.id],
+        }
+        response = self.client.patch(
+            f'/api/v1/outcomes/{outcome.id}/',
+            payload,
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        outcome.refresh_from_db()
+        self.assertEqual(outcome.invoice_number, 'OC-UPD')
+        ids = list(outcome.product_markings.values_list('id', flat=True))
+        self.assertCountEqual(ids, [self.m1.id, self.m3.id])
+        self.m2.refresh_from_db()
+        self.assertIsNone(self.m2.outcome_id)
+
+
+class WrittenOffMarkingNoUpdateDeleteTest(TestCase):
+    """Списанная маркировка (outcome != null): нельзя менять текст, удалять, перепривязывать."""
+
+    def setUp(self):
+        Group.objects.get_or_create(name='operator')
+        self.operator = create_user('operator_written_off', 'pass', 'operator')
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.operator)
+        self.company = Company.objects.create(name='Co', phone='1', inn='1')
+        self.to_company = Company.objects.create(name='ToCo', phone='2', inn='2')
+        self.product = Product.objects.create(name='P', price=1.0, kpi='k')
+        self.income = Income.objects.create(
+            from_company=self.company,
+            contract_date='2024-01-01',
+            contract_number='I1',
+            invoice_date='2024-01-01',
+            invoice_number='I1',
+            unit_of_measure='шт',
+            total=100.0,
+            is_archive=False,
+        )
+        self.marking = ProductMarking.objects.create(
+            marking='WRITTEN-OFF-M1',
+            income=self.income,
+            product=self.product,
+        )
+        self.outcome = Outcome.objects.create(
+            to_company=self.to_company,
+            contract_date='2024-01-01',
+            contract_number='O1',
+            invoice_date='2024-01-01',
+            invoice_number='O1',
+            unit_of_measure='шт',
+            total=10.0,
+            is_archive=False,
+        )
+        ProductMarking.objects.filter(id=self.marking.id).update(outcome=self.outcome)
+
+    def test_cannot_update_written_off_marking_via_put(self):
+        """PUT маркировки, уже списанной в расход → 400 MARKING_WRITTEN_OFF."""
+        url = f'/api/v1/incomes/{self.income.id}/products/{self.product.id}/markings/{self.marking.id}/'
+        response = self.client.put(url, {'marking': 'CHANGED', 'counter': False}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data.get('error', {}).get('code'), 'MARKING_WRITTEN_OFF')
+        self.marking.refresh_from_db()
+        self.assertEqual(self.marking.marking, 'WRITTEN-OFF-M1')
+
+    def test_cannot_delete_written_off_marking(self):
+        """DELETE маркировки, уже списанной в расход → 400 MARKING_WRITTEN_OFF."""
+        url = f'/api/v1/incomes/{self.income.id}/products/{self.product.id}/markings/{self.marking.id}/'
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data.get('error', {}).get('code'), 'MARKING_WRITTEN_OFF')
+        self.assertTrue(ProductMarking.objects.filter(id=self.marking.id).exists())

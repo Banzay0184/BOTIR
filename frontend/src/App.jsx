@@ -1,7 +1,6 @@
 import React, {useState, useEffect} from "react";
 import {Route, Routes, Navigate, useNavigate} from "react-router-dom";
 import NotFoundPage from "./pages/NotFoundPage.jsx";
-import DashboardPage from "./pages/DashboardPage.jsx";
 import Layout from "./components/Layout.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
 import DocumentPage from "./pages/DocumentPage.jsx";
@@ -29,7 +28,7 @@ function App() {
 
     const handleLogin = (user) => {
         setCurrentUser(user);
-        navigate("/home"); // Перенаправление на главную страницу после входа
+        navigate("/income");
     };
 
     const handleLogout = () => {
@@ -44,7 +43,7 @@ function App() {
         <Routes>
             {currentUser ? (
                 <Route path="/" element={<Layout currentUser={currentUser} onLogout={handleLogout}/>}>
-                    <Route path="/home" element={<DashboardPage/>} index/>
+                    <Route index element={<Navigate to="/income" replace />} />
                     <Route path="/documents" element={<DocumentPage/>}/>
                     <Route path="/income" element={<IncomeList currentUser={currentUser}/>}/>
                     <Route path="/outcome" element={<OutcomeList/>}/>
@@ -52,7 +51,7 @@ function App() {
                     <Route path="/incomedocument/:id" element={<IncomeDocumentViewPage/>}/>
                     <Route path="/outcomedocument" element={<OutcomeDocument currentUser={currentUser}/>}/>
                     <Route path="/outcomedocument/:id" element={<OutcomeDocumentViewPage/>}/>
-                    <Route path="/archive" element={<ArchivePage currentUser={currentUser}/>}/>
+                    <Route path="/archive" element={<ArchivePage/>}/>
                     <Route path="/products" element={<ProductsPage/>}/>
                     <Route path="/settings/users" element={<UsersPage/>}/>
                 </Route>

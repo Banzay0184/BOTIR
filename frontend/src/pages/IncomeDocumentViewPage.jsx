@@ -3,6 +3,15 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { getIncomeById } from '../api/api';
 
+const formatCreatedAt = (iso) => {
+    if (!iso) return '—';
+    try {
+        return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    } catch {
+        return '—';
+    }
+};
+
 /** Собирает строки таблицы товаров из product_markings (данные уже приходят с API с product_name, product_kpi, product_price). */
 const buildProductDetailsFromMarkings = (productMarkings) => {
     if (!Array.isArray(productMarkings) || productMarkings.length === 0) return [];
@@ -99,6 +108,9 @@ const IncomeDocumentViewPage = () => {
                 <header>
                     <h1 className="text-2xl font-bold text-blue-gray-900">Документ прихода</h1>
                     <p className="mt-1 text-sm text-blue-gray-500">№ контракта: {income.contract_number}</p>
+                    {income.created_at && (
+                        <p className="mt-0.5 text-xs text-blue-gray-400">Дата создания: {formatCreatedAt(income.created_at)}</p>
+                    )}
                 </header>
 
                 <section className="space-y-6">

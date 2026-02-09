@@ -49,8 +49,9 @@ const OutcomeDocument = ({ currentUser }) => {
                 
                 const data = response.data;
                 const results = data?.results ?? [];
-                setOutcomes(Array.isArray(results) ? results : []);
-                setTotalCount(data?.count ?? 0);
+                const list = Array.isArray(results) ? results : [];
+                setOutcomes(list);
+                setTotalCount(data?.count ?? list.length);
             } catch (error) {
                 if (!controller.signal.aborted) console.error('Error fetching outcomes:', getApiErrorMessage(error), error);
             } finally {
@@ -83,10 +84,10 @@ const OutcomeDocument = ({ currentUser }) => {
     };
 
     const handleUpdateOutcome = (updatedOutcome) => {
-        setOutcomes(prev => prev.map(outcome => 
+        if (!updatedOutcome?.id) return;
+        setOutcomes(prev => prev.map(outcome =>
             outcome.id === updatedOutcome.id ? updatedOutcome : outcome
         ));
-        console.log("Обновлён outcome:", updatedOutcome);
     };
 
     const openConfirmDeleteModal = (outcomeId) => {
@@ -197,6 +198,7 @@ const OutcomeDocument = ({ currentUser }) => {
                                 <th className="py-2 px-2 sm:px-4 border text-left text-sm">Компания</th>
                                 <th className="py-2 px-2 sm:px-4 border text-left text-sm">Дата контракта</th>
                                 <th className="py-2 px-2 sm:px-4 border text-left text-sm">Номер контракта</th>
+                                <th className="py-2 px-2 sm:px-4 border text-left text-sm whitespace-nowrap">Создан</th>
                                 <th className="py-2 px-2 sm:px-4 border text-left text-sm">Дата счета</th>
                                 <th className="py-2 px-2 sm:px-4 border text-left text-sm">Номер счета</th>
                                 <th className="py-2 px-2 sm:px-4 border text-left text-sm">Общая сумма</th>
@@ -206,7 +208,7 @@ const OutcomeDocument = ({ currentUser }) => {
                             <tbody>
                             {outcomes.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="py-4 text-center text-gray-500">
+                                    <td colSpan={8} className="py-4 text-center text-gray-500">
                                         Нет расходов
                                     </td>
                                 </tr>
@@ -217,6 +219,9 @@ const OutcomeDocument = ({ currentUser }) => {
                                 <td className="py-2 px-2 sm:px-4 border text-sm truncate max-w-[120px] sm:max-w-none">{outcome.to_company?.name}</td>
                                 <td className="py-2 px-2 sm:px-4 border text-sm whitespace-nowrap">{outcome.contract_date}</td>
                                 <td className="py-2 px-2 sm:px-4 border text-sm truncate max-w-[100px] sm:max-w-none">{outcome.contract_number}</td>
+                                <td className="py-2 px-2 sm:px-4 border text-sm whitespace-nowrap">
+                                    {outcome.created_at ? new Date(outcome.created_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
+                                </td>
                                 <td className="py-2 px-2 sm:px-4 border text-sm whitespace-nowrap">{outcome.invoice_date}</td>
                                 <td className="py-2 px-2 sm:px-4 border text-sm truncate max-w-[100px] sm:max-w-none">{outcome.invoice_number}</td>
                                 <td className="py-2 px-2 sm:px-4 border text-sm whitespace-nowrap">{outcome.total.toLocaleString()} сум.</td>
@@ -284,7 +289,7 @@ const OutcomeDocument = ({ currentUser }) => {
                             </tbody>
                         </table>
                     </div>
-                    {totalCount > PAGE_SIZE && (
+                    {totalCount > 0 && (
                         <Pagination
                             count={totalCount}
                             pageSize={PAGE_SIZE}

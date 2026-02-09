@@ -16,7 +16,7 @@ const LoginPage = ({onLogin}) => {
         AuthService.login(username, password).then(
             (response) => {
                 onLogin(response);
-                navigate("/home");
+                navigate("/income");
             },
             (error) => {
                 setErrors({ detail: getApiErrorMessage(error) });

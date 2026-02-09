@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { getIncomes, deleteIncome, archiveIncome, unarchiveIncome, canEdit, getApiErrorMessage } from '../api/api';
 import IncomeDetails from './IncomeDetails';
 import { Button, Input } from '@material-tailwind/react';
@@ -42,13 +43,14 @@ const IncomeDocument = ({ currentUser }) => {
                 if (startDate) params.date_from = startDate;
                 if (endDate) params.date_to = endDate;
 
-                const response = await getIncomes(controller.signal, params);
+                const response = await getIncomes(params, controller.signal);
                 if (controller.signal.aborted) return;
                 
                 const data = response.data;
                 const results = data?.results ?? [];
-                setIncomes(Array.isArray(results) ? results : []);
-                setTotalCount(data?.count ?? 0);
+                const list = Array.isArray(results) ? results : [];
+                setIncomes(list);
+                setTotalCount(data?.count ?? list.length);
             } catch (error) {
                 if (controller.signal.aborted) return;
                 console.error('Error fetching incomes:', getApiErrorMessage(error), error);
@@ -82,11 +84,10 @@ const IncomeDocument = ({ currentUser }) => {
     };
 
     const handleUpdateIncome = (updatedIncome) => {
-        // Обновляем список на текущей странице
-        setIncomes(prev => prev.map(income => 
+        if (!updatedIncome?.id) return;
+        setIncomes(prev => prev.map(income =>
             income.id === updatedIncome.id ? updatedIncome : income
         ));
-        console.log("Обновлён income:", updatedIncome);
     };
 
     const handleArchiveIncome = async (incomeId) => {
@@ -115,8 +116,10 @@ const IncomeDocument = ({ currentUser }) => {
             await deleteIncome(incomeId);
             setIncomes(prev => prev.filter(income => income.id !== incomeId));
             setTotalCount(prev => Math.max(0, prev - 1));
+            toast.success('Приход удалён');
         } catch (error) {
             console.error('Ошибка при удалении дохода:', error);
+            toast.error(getApiErrorMessage(error));
         }
     };
 
@@ -192,6 +195,7 @@ const IncomeDocument = ({ currentUser }) => {
                                 <th className="py-2 px-2 sm:px-4 border text-left text-sm">Компания</th>
                                 <th className="py-2 px-2 sm:px-4 border text-left text-sm">Дата контракта</th>
                                 <th className="py-2 px-2 sm:px-4 border text-left text-sm">Номер контракта</th>
+                                <th className="py-2 px-2 sm:px-4 border text-left text-sm whitespace-nowrap">Создан</th>
                                 <th className="py-2 px-2 sm:px-4 border text-left text-sm">Дата счета</th>
                                 <th className="py-2 px-2 sm:px-4 border text-left text-sm">Номер счета</th>
                                 <th className="py-2 px-2 sm:px-4 border text-left text-sm">Общая сумма</th>
@@ -201,7 +205,7 @@ const IncomeDocument = ({ currentUser }) => {
                             <tbody>
                             {incomes.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="py-4 text-center text-gray-500">
+                                    <td colSpan={8} className="py-4 text-center text-gray-500">
                                         Нет приходов
                                     </td>
                                 </tr>
@@ -212,6 +216,9 @@ const IncomeDocument = ({ currentUser }) => {
                                             <td className="py-2 px-2 sm:px-4 border text-sm truncate max-w-[120px] sm:max-w-none">{income.from_company?.name}</td>
                                             <td className="py-2 px-2 sm:px-4 border text-sm whitespace-nowrap">{income.contract_date}</td>
                                             <td className="py-2 px-2 sm:px-4 border text-sm truncate max-w-[100px] sm:max-w-none">{income.contract_number}</td>
+                                            <td className="py-2 px-2 sm:px-4 border text-sm whitespace-nowrap">
+                                                {income.created_at ? new Date(income.created_at).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
+                                            </td>
                                             <td className="py-2 px-2 sm:px-4 border text-sm whitespace-nowrap">{income.invoice_date}</td>
                                             <td className="py-2 px-2 sm:px-4 border text-sm truncate max-w-[100px] sm:max-w-none">{income.invoice_number}</td>
                                             <td className="py-2 px-2 sm:px-4 border text-sm whitespace-nowrap">{income.total.toLocaleString()} сум.</td>
@@ -279,7 +286,7 @@ const IncomeDocument = ({ currentUser }) => {
                             </tbody>
                         </table>
                     </div>
-                    {totalCount > PAGE_SIZE && (
+                    {totalCount > 0 && (
                         <Pagination
                             count={totalCount}
                             pageSize={PAGE_SIZE}

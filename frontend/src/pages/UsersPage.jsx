@@ -188,7 +188,7 @@ export default function UsersPage() {
     };
 
     if (!isAdmin()) {
-        return <Navigate to="/home" replace />;
+        return <Navigate to="/income" replace />;
     }
 
     if (loading) {

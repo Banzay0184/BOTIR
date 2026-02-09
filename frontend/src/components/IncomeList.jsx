@@ -18,6 +18,7 @@ export default function IncomeList({currentUser}) {
     const [currentPage, setCurrentPage] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
+    const [refreshKey, setRefreshKey] = useState(0);
 
     useEffect(() => {
         const controller = new AbortController();
@@ -25,11 +26,11 @@ export default function IncomeList({currentUser}) {
             try {
                 setIsLoading(true);
                 const response = await getAvailableMarkings(
-                    { search: searchTerm, page: currentPage }, 
+                    { search: searchTerm, page: currentPage },
                     controller.signal
                 );
                 if (controller.signal.aborted) return;
-                
+
                 const data = response.data;
                 setMarkings(data?.results ?? []);
                 setTotalCount(data?.count ?? 0);
@@ -40,10 +41,10 @@ export default function IncomeList({currentUser}) {
                 if (!controller.signal.aborted) setIsLoading(false);
             }
         };
-        
+
         fetchMarkings();
         return () => controller.abort();
-    }, [currentPage, searchTerm]);
+    }, [currentPage, searchTerm, refreshKey]);
 
     const toggleModal = () => {
         setModalOpen(!isModalOpen);
@@ -57,10 +58,10 @@ export default function IncomeList({currentUser}) {
         setOutcomeModalOpen(false);
     };
 
-    const handleAddIncome = (income) => {
+    const handleAddIncome = () => {
         setModalOpen(false);
-        // Refresh the list to show the new income
         setCurrentPage(1);
+        setRefreshKey((k) => k + 1);
     };
 
     const handlePageChange = (page) => {

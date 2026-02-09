@@ -172,6 +172,7 @@ class IncomeSerializer(serializers.ModelSerializer):
             raise ValidationError(
                 {'is_archive': 'Редактирование архивного документа прихода запрещено.'}
             )
+        validated_data.pop('is_archive', None)  # Менять только через POST .../archive/ и .../unarchive/
         company_data = validated_data.pop('from_company', None)
         products_data = validated_data.pop('products', None)
 
@@ -184,7 +185,6 @@ class IncomeSerializer(serializers.ModelSerializer):
         instance.invoice_number = validated_data.get('invoice_number', instance.invoice_number)
         instance.unit_of_measure = validated_data.get('unit_of_measure', instance.unit_of_measure)
         instance.total = validated_data.get('total', instance.total)
-        instance.is_archive = validated_data.get('is_archive', instance.is_archive)
         instance.save()
 
         if products_data:
@@ -224,6 +224,14 @@ class OutcomeSerializer(serializers.ModelSerializer):
         many=True, queryset=ProductMarking.objects.all(), write_only=True
     )
     added_by = serializers.StringRelatedField(read_only=True)  # Display the user's name
+
+    def get_fields(self):
+        fields = super().get_fields()
+        # При PUT/PATCH не требовать product_markings: если не прислали — не трогаем маркировки.
+        view = self.context.get('view')
+        if view and getattr(view, 'action', None) in ('update', 'partial_update'):
+            fields['product_markings'].required = False
+        return fields
 
     class Meta:
         model = Outcome
@@ -266,17 +274,17 @@ class OutcomeSerializer(serializers.ModelSerializer):
         company, created = Company.objects.get_or_create(**company_data)
         outcome = Outcome.objects.create(to_company=company, added_by=user, **validated_data)
 
-        # Защита от гонок: атомарный bulk update только по маркировкам с outcome__isnull=True,
-        # проверка числа обновлённых строк — при параллельных запросах один получит updated < len.
+        # Защита от гонок: атомарный UPDATE только по маркировкам с outcome__isnull=True;
+        # при параллельных запросах один получит updated < len → 400 + список конфликтных маркировок.
         marking_ids = [m.id for m in product_markings_data]
         updated = ProductMarking.objects.filter(
             id__in=marking_ids, outcome__isnull=True
         ).update(outcome=outcome)
         if updated != len(marking_ids):
+            not_attached = ProductMarking.objects.filter(id__in=marking_ids).exclude(outcome=outcome)
+            conflicting = list(not_attached.values_list('marking', flat=True))[:10]
             raise ValidationError({
-                'product_markings': [
-                    'Часть маркировок уже привязана к другому расходу. Обновите страницу и попробуйте снова.'
-                ]
+                'product_markings': [f'Маркировка уже списана: {m}' for m in conflicting]
             })
 
         return outcome
@@ -287,7 +295,9 @@ class OutcomeSerializer(serializers.ModelSerializer):
             raise ValidationError(
                 {'is_archive': 'Редактирование архивного документа расхода запрещено.'}
             )
+        validated_data.pop('is_archive', None)  # Менять только через POST .../archive/ и .../unarchive/
         company_data = validated_data.pop('to_company')
+        # Если product_markings не прислали (optional при PUT/PATCH) — не трогаем маркировки.
         product_markings_data = validated_data.pop('product_markings', None)
 
         company, created = Company.objects.get_or_create(**company_data)
@@ -298,24 +308,36 @@ class OutcomeSerializer(serializers.ModelSerializer):
         instance.invoice_number = validated_data.get('invoice_number', instance.invoice_number)
         instance.unit_of_measure = validated_data.get('unit_of_measure', instance.unit_of_measure)
         instance.total = validated_data.get('total', instance.total)
-        instance.is_archive = validated_data.get('is_archive', instance.is_archive)
         instance.save()
 
-        # Меняем список маркировок только если документ не архив: отвязать старые, затем привязать новые
-        # тем же атомарным способом (bulk update по outcome__isnull=True + проверка числа строк).
+        # Маркировки меняем только если их прислали (иначе оставляем как есть). Синхронизация: to_detach / to_attach.
+        # current_ids = уже привязано; new_ids = пришло с фронта; привязываем to_attach только при outcome__isnull=True.
         if product_markings_data is not None and not instance.is_archive:
             self._validate_markings_not_already_written_off(product_markings_data, instance=instance)
-            ProductMarking.objects.filter(outcome=instance).update(outcome=None)
-            marking_ids = [m.id for m in product_markings_data]
-            updated = ProductMarking.objects.filter(
-                id__in=marking_ids, outcome__isnull=True
-            ).update(outcome=instance)
-            if updated != len(marking_ids):
-                raise ValidationError({
-                    'product_markings': [
-                        'Часть маркировок уже привязана к другому расходу. Обновите страницу и попробуйте снова.'
-                    ]
-                })
+            current_ids = set(
+                instance.product_markings.values_list('id', flat=True)
+            )
+            new_ids = set(m.id for m in product_markings_data)
+            to_detach = current_ids - new_ids
+            to_attach = new_ids - current_ids
+
+            if to_detach:
+                ProductMarking.objects.filter(
+                    id__in=to_detach, outcome=instance
+                ).update(outcome=None)
+
+            if to_attach:
+                updated = ProductMarking.objects.filter(
+                    id__in=to_attach, outcome__isnull=True
+                ).update(outcome=instance)
+                if updated != len(to_attach):
+                    not_attached = ProductMarking.objects.filter(
+                        id__in=to_attach
+                    ).exclude(outcome=instance)
+                    conflicting = list(not_attached.values_list('marking', flat=True))[:10]
+                    raise ValidationError({
+                        'product_markings': [f'Маркировка уже списана: {m}' for m in conflicting]
+                    })
 
         return instance
 

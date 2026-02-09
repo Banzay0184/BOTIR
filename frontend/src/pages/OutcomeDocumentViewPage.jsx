@@ -1,7 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
-import { getOutcomeById } from '../api/api';
+import { getOutcomeByIdCached } from '../api/api';
+
+const formatCreatedAt = (iso) => {
+    if (!iso) return '—';
+    try {
+        return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    } catch {
+        return '—';
+    }
+};
 
 /** Собирает строки таблицы товаров из product_markings (данные приходят с API: product_name, product_kpi, product_price). */
 const buildProductDetailsFromMarkings = (productMarkings) => {
@@ -38,7 +47,7 @@ const OutcomeDocumentViewPage = () => {
             try {
                 setIsLoading(true);
                 setError(null);
-                const response = await getOutcomeById(id, controller.signal);
+                const response = await getOutcomeByIdCached(id, controller.signal);
                 if (controller.signal.aborted) return;
                 const doc = response.data;
                 setOutcome(doc);
@@ -99,6 +108,9 @@ const OutcomeDocumentViewPage = () => {
                 <header>
                     <h1 className="text-2xl font-bold text-blue-gray-900">Документ расхода</h1>
                     <p className="mt-1 text-sm text-blue-gray-500">№ контракта: {outcome.contract_number}</p>
+                    {outcome.created_at && (
+                        <p className="mt-0.5 text-xs text-blue-gray-400">Дата создания: {formatCreatedAt(outcome.created_at)}</p>
+                    )}
                 </header>
 
                 <section className="space-y-6">

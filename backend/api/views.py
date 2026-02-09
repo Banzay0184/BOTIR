@@ -17,6 +17,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 import logging
+from collections import Counter
 from django.db.models import Count, Q, Sum
 from django.db.models.functions import TruncMonth
 from django_filters.rest_framework import DjangoFilterBackend
@@ -73,7 +74,7 @@ class ProductViewSet(viewsets.ModelViewSet):
 
 
 class ProductMarkingViewSet(viewsets.ModelViewSet):
-    queryset = ProductMarking.objects.select_related('income').all()
+    queryset = ProductMarking.objects.select_related('income', 'product', 'outcome').all()
     serializer_class = ProductMarkingSerializer
     permission_classes = [IsAuthenticated, IsOperatorOrAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend]
@@ -92,6 +93,7 @@ class ProductMarkingViewSet(viewsets.ModelViewSet):
         return marking.income_id is not None and marking.income is not None and marking.income.is_archive
 
     def _marking_written_off_error(self, marking_id):
+        """ProductMarking.outcome != null → нельзя менять текст маркировки, удалять, перепривязывать (бухгалтерия)."""
         return error_response(
             'MARKING_WRITTEN_OFF',
             'Маркировка уже списана. Удаление и изменение запрещены.',
@@ -138,21 +140,27 @@ class ProductMarkingViewSet(viewsets.ModelViewSet):
         Фильтры:
         - outcome IS NULL (товар не списан)
         - income.is_archive = False (документ прихода не в архиве)
-        
-        Query params:
-        - search: поиск по marking, product_name
-        - page: номер страницы (PAGE_SIZE=50)
+
+        Оптимизация: select_related('product', 'income') убирает N+1 при отдаче
+        product_name, product_kpi, income_unit_of_measure. Индексы: outcome_id, product_id, income_id.
+        Поиск по marking (icontains). Для Postgres: при росте данных можно добавить
+        pg_trgm и GIN-индекс по marking для ускорения ILIKE.
+
+        Query params: search (по marking, product name), page.
         """
-        qs = ProductMarking.objects.filter(
-            outcome__isnull=True,
-            income__is_archive=False
-        ).select_related('income', 'product').order_by('-created_at')
-        
+        qs = (
+            ProductMarking.objects.filter(
+                outcome__isnull=True,
+                income__is_archive=False,
+            )
+            .select_related('product', 'income')
+            .order_by('-created_at')
+        )
+
         search = (request.query_params.get('search') or '').strip()
         if search:
             qs = qs.filter(
-                Q(marking__icontains=search) | 
-                Q(product__name__icontains=search)
+                Q(marking__icontains=search) | Q(product__name__icontains=search)
             )
         
         page = self.paginate_queryset(qs)
@@ -164,6 +172,12 @@ class ProductMarkingViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+# Правило архива: is_archive=True = полная заморозка документа (финальная фиксация).
+# Нельзя: updateIncome, updateMarking, deleteMarking для прихода/маркировок прихода;
+# updateOutcome для расхода; архивный документ можно только удалить (после архивации).
+# Изменение is_archive только через POST .../archive/ и .../unarchive/.
+
+
 class IncomeViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsOperatorOrAdminOrReadOnly]
     queryset = Income.objects.prefetch_related("income").select_related('from_company', 'added_by').order_by('created_at')
@@ -173,8 +187,13 @@ class IncomeViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """Все приходы видны всем авторизованным пользователям (без фильтра по added_by)."""
-        return Income.objects.prefetch_related("income").select_related('from_company', 'added_by').order_by('created_at')
+        qs = Income.objects.prefetch_related("income").select_related('from_company', 'added_by')
+        if self.request.query_params.get('is_archive') == 'true':
+            # Последний добавленный в архив — первым в списке
+            return qs.order_by('-archived_at', '-id')
+        return qs.order_by('created_at')
 
+    # Правило архива (must при странице /archive): архивный приход — только чтение. PUT/PATCH → 400.
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
         if instance.is_archive:
@@ -226,27 +245,19 @@ class IncomeViewSet(viewsets.ModelViewSet):
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
 
+        written_off_count = ProductMarking.objects.filter(income=income).exclude(outcome__isnull=True).count()
+        if written_off_count > 0:
+            return error_response(
+                'HAS_WRITTEN_OFF_MARKINGS',
+                'Нельзя удалить приход: часть маркировок уже списана в расход.',
+                details={'count': written_off_count},
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
         related_markings = ProductMarking.objects.filter(income=income)
-        outcomes_to_delete = set()
-        for marking in related_markings:
-            if marking.outcome:
-                outcomes_to_delete.add(marking.outcome)
-        for outcome in outcomes_to_delete:
-            try:
-                self.perform_destroy_outcome(outcome)
-            except Outcome.DoesNotExist:
-                pass
         related_markings.delete()
         income.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-
-    def perform_destroy_outcome(self, outcome):
-        """
-        Вспомогательная функция для удаления Outcome
-        """
-        # Удаляем связанные маркировки продуктов, если нужно
-        ProductMarking.objects.filter(outcome=outcome).update(outcome=None)
-        outcome.delete()
 
 
 class OutcomeViewSet(viewsets.ModelViewSet):
@@ -258,8 +269,14 @@ class OutcomeViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """Все расходы видны всем авторизованным пользователям (без фильтра по added_by)."""
-        return Outcome.objects.select_related('to_company', 'added_by').prefetch_related('product_markings').order_by('created_at')
+        qs = Outcome.objects.select_related('to_company', 'added_by').prefetch_related('product_markings')
+        if self.request.query_params.get('is_archive') == 'true':
+            # Последний добавленный в архив — первым в списке
+            return qs.order_by('-archived_at', '-id')
+        return qs.order_by('created_at')
 
+    # Правило архива (must при отдельной странице /archive): архивный расход — только чтение.
+    # PUT/PATCH/DELETE по архиву: редактирование запрещено (400); удаление — только после архива, затем разрешено.
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
         if instance.is_archive:
@@ -315,6 +332,7 @@ class OutcomeViewSet(viewsets.ModelViewSet):
 
 
 class UpdateMarkingView(APIView):
+    """PUT/DELETE маркировки в приходе. Запрет, если marking.outcome != null (уже списана)."""
     permission_classes = [IsAuthenticated, IsOperatorOrAdminOrReadOnly]
 
     def put(self, request, income_id, product_id, marking_id):
@@ -492,6 +510,38 @@ def logout_view(request):
 def check_marking_exists(request, marking):
     exists = ProductMarking.objects.filter(marking=marking).exists()
     return Response({'exists': exists})
+
+
+@api_view(['POST'])
+@perm_classes([IsAuthenticated])
+def check_markings_batch(request):
+    """
+    Проверка маркировок пачкой.
+    Body: { "markings": ["ABC1", "ABC2", ...] }
+    Response: { "exists": [...], "duplicates": [...] }
+    exists — уже есть в базе; duplicates — повторились внутри запроса.
+    """
+    markings = request.data.get('markings')
+    if not isinstance(markings, list):
+        return Response(
+            {'error': 'Ожидается массив markings'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    # Нормализуем: строки, без пустых
+    normalized = [str(m).strip() for m in markings if m is not None and str(m).strip()]
+    if not normalized:
+        return Response({'exists': [], 'duplicates': []})
+
+    # Дубликаты внутри запроса (значения, встречающиеся больше одного раза)
+    counts = Counter(normalized)
+    duplicates = [m for m, c in counts.items() if c > 1]
+
+    # Уже есть в базе
+    unique_markings = list(set(normalized))
+    existing_qs = ProductMarking.objects.filter(marking__in=unique_markings)
+    exists = list(existing_qs.values_list('marking', flat=True))
+
+    return Response({'exists': exists, 'duplicates': duplicates})
 
 
 @api_view(['GET'])

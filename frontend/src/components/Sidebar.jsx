@@ -61,7 +61,7 @@ export default function Sidebar({currentUser, onLogout}) {
             {/* Шапка с бургером — всегда видна */}
             <header className="sticky top-0 z-30 flex items-center gap-3 h-14 min-h-[44px] pl-[max(0.75rem,env(safe-area-inset-left))] pr-4 bg-white border-b border-blue-gray-100 shadow-sm shrink-0">
                 <BurgerIcon open={isSidebarVisible} onClick={toggleSidebar} />
-                <Link to="/home" className="font-semibold text-xl text-blue-600 hover:text-blue-700">
+                <Link to="/income" className="font-semibold text-xl text-blue-600 hover:text-blue-700">
                     Warehouse
                 </Link>
             </header>
