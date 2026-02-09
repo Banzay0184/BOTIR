@@ -69,8 +69,8 @@ const clearSessionAndRedirect = () => {
 axiosInstance.interceptors.request.use(
     (config) => {
         const user = JSON.parse(sessionStorage.getItem('user')); // Retrieve user data from sessionStorage
-        if (user && user.accessToken) {
-            config.headers['Authorization'] = 'Bearer ' + user.accessToken; // Set Authorization header
+        if (user && user.access) {
+            config.headers['Authorization'] = 'Bearer ' + user.access; // Set Authorization header
         }
         return config;
     },
@@ -90,7 +90,7 @@ axiosInstance.interceptors.response.use(
         }
         originalRequest._retry = true;
         const user = JSON.parse(sessionStorage.getItem('user'));
-        if (!user?.refreshToken) {
+        if (!user?.refresh) {
             return Promise.reject(error);
         }
 
@@ -98,13 +98,13 @@ axiosInstance.interceptors.response.use(
             refreshPromise = (async () => {
                 try {
                     const { data } = await axios.post(`${API_URL}/token/refresh/`, {
-                        refresh: user.refreshToken,
+                        refresh: user.refresh,
                     });
                     if (!data.access) throw new Error('No access token in refresh response');
                     const updatedUser = {
                         ...user,
-                        accessToken: data.access,
-                        refreshToken: data.refresh ?? user.refreshToken,
+                        access: data.access,
+                        refresh: data.refresh ?? user.refresh,
                         ...(Array.isArray(data.groups) && { groups: data.groups }),
                         ...(typeof data.is_superuser === 'boolean' && { is_superuser: data.is_superuser }),
                     };
@@ -443,8 +443,8 @@ class AuthService {
             .then(response => {
                 if (response.data.access) {
                     const user = {
-                        accessToken: response.data.access,
-                        refreshToken: response.data.refresh,
+                        access: response.data.access,
+                        refresh: response.data.refresh,
                         username: response.data.username,
                         firstName: response.data.first_name,
                         lastName: response.data.last_name,

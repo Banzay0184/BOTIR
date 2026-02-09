@@ -9,6 +9,29 @@ from django.contrib.auth import get_user_model
 from warehouse.models import Company, Product, ProductMarking, Income, Outcome, CustomUser
 
 
+def get_or_create_company(company_data):
+    """
+    Найти или создать компанию. Идентификатор — ИНН (если есть).
+    Иначе fallback на name+phone. Используем update_or_create по ИНН,
+    чтобы обновлять имя/телефон при изменении, а не плодить дубликаты.
+    """
+    inn = (company_data.get("inn") or "").strip()
+    name = (company_data.get("name") or "").strip()
+    phone = (company_data.get("phone") or "").strip()
+    if inn:
+        company, _ = Company.objects.update_or_create(
+            inn=inn,
+            defaults={"name": name, "phone": phone},
+        )
+    else:
+        company, _ = Company.objects.get_or_create(
+            name=name,
+            phone=phone,
+            defaults={"inn": None},
+        )
+    return company
+
+
 class CustomUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = CustomUser
@@ -153,7 +176,7 @@ class IncomeSerializer(serializers.ModelSerializer):
         if not user.is_authenticated:
             raise ValidationError("Пользователь должен быть аутентифицирован для создания записи.")
 
-        company, created = Company.objects.get_or_create(**company_data)
+        company = get_or_create_company(company_data)
         income = Income.objects.create(from_company=company, added_by=user, **validated_data)
 
         for product_data in products_data:
@@ -182,8 +205,7 @@ class IncomeSerializer(serializers.ModelSerializer):
         products_data = validated_data.pop('products', None)
 
         if company_data is not None:
-            company, created = Company.objects.get_or_create(**company_data)
-            instance.from_company = company
+            instance.from_company = get_or_create_company(company_data)
         instance.contract_date = validated_data.get('contract_date', instance.contract_date)
         instance.contract_number = validated_data.get('contract_number', instance.contract_number)
         instance.invoice_date = validated_data.get('invoice_date', instance.invoice_date)
@@ -276,7 +298,7 @@ class OutcomeSerializer(serializers.ModelSerializer):
 
         self._validate_markings_not_already_written_off(product_markings_data)
 
-        company, created = Company.objects.get_or_create(**company_data)
+        company = get_or_create_company(company_data)
         outcome = Outcome.objects.create(to_company=company, added_by=user, **validated_data)
 
         # Защита от гонок: атомарный UPDATE только по маркировкам с outcome__isnull=True;
@@ -305,8 +327,7 @@ class OutcomeSerializer(serializers.ModelSerializer):
         # Если product_markings не прислали (optional при PUT/PATCH) — не трогаем маркировки.
         product_markings_data = validated_data.pop('product_markings', None)
 
-        company, created = Company.objects.get_or_create(**company_data)
-        instance.to_company = company
+        instance.to_company = get_or_create_company(company_data)
         instance.contract_date = validated_data.get('contract_date', instance.contract_date)
         instance.contract_number = validated_data.get('contract_number', instance.contract_number)
         instance.invoice_date = validated_data.get('invoice_date', instance.invoice_date)

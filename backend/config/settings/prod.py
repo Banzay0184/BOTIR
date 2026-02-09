@@ -1,5 +1,6 @@
 from .base import *
 
+# В проде всегда выключен (иначе сервер отдаёт HTML Debug page при 500).
 DEBUG = False
 
 # Хост PythonAnywhere (в base ALLOWED_HOSTS берётся из DJANGO_ALLOWED_HOSTS)
