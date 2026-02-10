@@ -537,7 +537,7 @@ const AddIncomeModal = ({isOpen, onClose, onAddIncome, income: editIncome, onUpd
         } catch (error) {
             const status = error.response?.status;
             const isNetwork = !error.response || error.code === 'ERR_NETWORK';
-            const isSessionExpired = status === 401 || status === 400;
+            const isSessionExpired = status === 401;
             if (isSessionExpired) {
                 toast.error('Сессия истекла, войдите снова');
                 setError('Сессия истекла, войдите снова');
