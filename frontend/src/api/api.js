@@ -139,22 +139,38 @@ axiosInstance.interceptors.response.use(
 // API Functions
 // Контракт: list — (params = {}, signal), getById — (id, signal). Не путать порядок аргументов.
 
-export const getCompanies = () => axiosInstance.get('/companies/');
+export const getCompanies = (params = {}) => axiosInstance.get('/companies/', { params });
+
+/** Загрузить все страницы компаний (для селекта — показывать все, не только первую страницу). */
+export const getCompaniesAllPages = async (signal) => {
+    const all = [];
+    let page = 1;
+    let hasNext = true;
+    while (hasNext) {
+        const config = { params: { page } };
+        if (signal) config.signal = signal;
+        const response = await axiosInstance.get('/companies/', config);
+        const data = response.data;
+        const results = data?.results ?? (Array.isArray(data) ? data : []);
+        all.push(...results);
+        hasNext = Boolean(data?.next);
+        page += 1;
+    }
+    return all;
+};
 
 let _companiesCache = null;
 let _companiesPromise = null;
 
 /**
- * Список компаний с кэшем (один запрос на сессию, без дубликатов при повторном открытии модалки).
+ * Список компаний с кэшем (все страницы), без дубликатов при повторном открытии модалки.
  * Сброс кэша: после createCompany или перезагрузка страницы.
  */
-export const getCompaniesCached = async () => {
+export const getCompaniesCached = async (signal) => {
     if (Array.isArray(_companiesCache) && _companiesCache.length > 0) return { data: _companiesCache };
     if (_companiesPromise) return _companiesPromise;
-    _companiesPromise = getCompanies()
-        .then((res) => {
-            const raw = res.data;
-            const list = Array.isArray(raw) ? raw : (raw?.results ?? []);
+    _companiesPromise = getCompaniesAllPages(signal)
+        .then((list) => {
             _companiesCache = Array.isArray(list) ? list : [];
             return { data: _companiesCache };
         })

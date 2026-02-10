@@ -254,8 +254,16 @@ const EditOutcomeModal = ({ isOpen, onClose, outcome, onUpdateOutcome }) => {
                                     className='w-[60%]'
                                     options={companyOptions}
                                     onChange={handleCompanyChange}
-                                    placeholder="Выберите компанию"
+                                    placeholder="Выберите компанию (поиск по названию, ИНН или телефону)"
                                     value={companyOptions.find(option => option.value === formData.to_company.id) || null}
+                                    filterOption={(option, inputValue) => {
+                                        const v = (inputValue || '').toLowerCase().trim();
+                                        if (!v) return true;
+                                        const label = (option.label || '').toLowerCase();
+                                        const inn = (option.inn ?? '').toString().toLowerCase();
+                                        const phone = (option.phone ?? '').toString().toLowerCase();
+                                        return label.includes(v) || inn.includes(v) || phone.includes(v);
+                                    }}
                                     menuPortalTarget={document.body}
                                     menuPosition="fixed"
                                     styles={{ menuPortal: (base) => ({ ...base, zIndex: 10000 }) }}

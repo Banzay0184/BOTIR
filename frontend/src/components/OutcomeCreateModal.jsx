@@ -1,7 +1,7 @@
 import React, {useState, useEffect} from 'react';
 import Select from 'react-select';
 import {Dialog, DialogHeader, DialogBody, DialogFooter, Button, Input} from '@material-tailwind/react';
-import { createOutcome, getCompanies, getApiErrorMessage, getApiErrorDetailsAsList } from '../api/api';
+import { createOutcome, getCompaniesCached, getApiErrorMessage, getApiErrorDetailsAsList } from '../api/api';
 import AddCompanyModal from './AddCompanyModal';
 
 const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarkings, setMarkings}) => {
@@ -31,8 +31,9 @@ const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarki
         if (isOpen) {
             const fetchCompanies = async () => {
                 try {
-                    const response = await getCompanies();
-                    const options = response.data.map(company => ({
+                    const response = await getCompaniesCached();
+                    const list = response.data ?? [];
+                    const options = list.map(company => ({
                         value: company.id,
                         label: company.name,
                         phone: company.phone,
@@ -189,8 +190,16 @@ const OutcomeCreateModal = ({isOpen, onClose, selectedMarkings, setSelectedMarki
                                     className='w-[50%]'
                                     options={companyOptions}
                                     onChange={handleCompanyChange}
-                                    placeholder="Выберите компанию"
+                                    placeholder="Выберите компанию (поиск по названию, ИНН или телефону)"
                                     value={companyOptions.find(option => option.value === formData.to_company.id) || null}
+                                    filterOption={(option, inputValue) => {
+                                        const v = (inputValue || '').toLowerCase().trim();
+                                        if (!v) return true;
+                                        const label = (option.label || '').toLowerCase();
+                                        const inn = (option.inn ?? '').toString().toLowerCase();
+                                        const phone = (option.phone ?? '').toString().toLowerCase();
+                                        return label.includes(v) || inn.includes(v) || phone.includes(v);
+                                    }}
                                 />
                             </div>
                             <Button
