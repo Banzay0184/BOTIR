@@ -14,7 +14,10 @@ def get_or_create_company(company_data):
     Найти или создать компанию. Идентификатор — ИНН (если есть).
     Иначе fallback на name+phone. Используем update_or_create по ИНН,
     чтобы обновлять имя/телефон при изменении, а не плодить дубликаты.
+    Если передан уже объект Company (из CompanyField), возвращаем как есть.
     """
+    if isinstance(company_data, Company):
+        return company_data
     inn = (company_data.get("inn") or "").strip()
     name = (company_data.get("name") or "").strip()
     phone = (company_data.get("phone") or "").strip()
@@ -30,6 +33,25 @@ def get_or_create_company(company_data):
             defaults={"inn": None},
         )
     return company
+
+
+class CompanyField(serializers.Field):
+    """
+    Принимает компанию либо по id (выбор из списка), либо как вложенный объект (новая компания).
+    При наличии id возвращаем существующую Company без проверки уникальности ИНН.
+    """
+    def to_internal_value(self, data):
+        if isinstance(data, dict) and data.get("id") is not None:
+            try:
+                return Company.objects.get(id=data["id"])
+            except (Company.DoesNotExist, TypeError, ValueError) as e:
+                raise ValidationError("Компания с указанным id не найдена.") from e
+        if isinstance(data, dict):
+            return data
+        raise ValidationError("Ожидается объект компании (id или name, phone, inn).")
+
+    def to_representation(self, value):
+        return CompanySerializer(value).data
 
 
 class CustomUserSerializer(serializers.ModelSerializer):
@@ -154,7 +176,7 @@ class ProductMarkingSerializer(serializers.ModelSerializer):
 
 class IncomeSerializer(serializers.ModelSerializer):
     added_by = serializers.StringRelatedField()
-    from_company = CompanySerializer()
+    from_company = CompanyField()
     products = serializers.ListField(child=serializers.DictField(), write_only=True)
     product_markings = serializers.SerializerMethodField()
 
@@ -246,7 +268,7 @@ class IncomeSerializer(serializers.ModelSerializer):
 
 
 class OutcomeSerializer(serializers.ModelSerializer):
-    to_company = CompanySerializer()
+    to_company = CompanyField()
     product_markings = serializers.PrimaryKeyRelatedField(
         many=True, queryset=ProductMarking.objects.all(), write_only=True
     )
