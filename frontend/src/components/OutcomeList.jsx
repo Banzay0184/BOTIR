@@ -1,34 +1,49 @@
-import React, {useState, useEffect} from 'react';
-import {Card, Typography, Button} from "@material-tailwind/react";
-import OutcomeItemList from "./OutcomeItemList.jsx";
-import OutcomeCreateModal from './OutcomeCreateModal.jsx';
-import {getOutcomes} from '../api/api';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Card, Typography } from '@material-tailwind/react';
+import OutcomeItemList from './OutcomeItemList.jsx';
+import { getOutcomes } from '../api/api';
 
-const TABLE_HEAD = ["ID", "Название товара", "Единица измерения", "ИКПУ", "Маркировка", "Компания"];
+const TABLE_HEAD = ['ID', 'Название товара', 'Единица измерения', 'ИКПУ', 'Маркировка', 'Компания'];
+
+const SEARCH_DEBOUNCE_MS = 350;
 
 export default function OutcomeList() {
     const [searchTerm, setSearchTerm] = useState('');
     const [totalMarkings, setTotalMarkings] = useState(0);
     const [selectedMarkings, setSelectedMarkings] = useState([]);
     const [outcomes, setOutcomes] = useState([]);
-    const [isLoading, setIsLoading] = useState(true); // Добавляем состояние для отслеживания загрузки
+    const [isLoading, setIsLoading] = useState(true);
+    const debounceRef = useRef(null);
 
-    useEffect(() => {
-        const fetchOutcomes = async () => {
-            try {
-                setIsLoading(true); // Устанавливаем состояние загрузки в true перед запросом
-                const response = await getOutcomes();
-                const data = response.data?.results ?? response.data;
-                setOutcomes(Array.isArray(data) ? data : []);
-            } catch (error) {
-                console.error('Failed to fetch outcomes:', error);
-            } finally {
-                setIsLoading(false); // Устанавливаем состояние загрузки в false после завершения запроса
-            }
-        };
-
-        fetchOutcomes();
+    const fetchOutcomes = useCallback(async (params = {}) => {
+        try {
+            setIsLoading(true);
+            const response = await getOutcomes(params);
+            const data = response.data?.results ?? response.data;
+            setOutcomes(Array.isArray(data) ? data : []);
+        } catch (error) {
+            console.error('Failed to fetch outcomes:', error);
+        } finally {
+            setIsLoading(false);
+        }
     }, []);
+
+    // Загрузка списка: без поиска — первая страница; при вводе маркировки — поиск на сервере (показывает и последние расходы)
+    useEffect(() => {
+        const term = searchTerm.trim();
+        if (!term) {
+            fetchOutcomes();
+            return;
+        }
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => {
+            fetchOutcomes({ marking: term });
+            debounceRef.current = null;
+        }, SEARCH_DEBOUNCE_MS);
+        return () => {
+            if (debounceRef.current) clearTimeout(debounceRef.current);
+        };
+    }, [searchTerm, fetchOutcomes]);
 
     const handleUpdateMarkingCount = (count) => {
         setTotalMarkings(count);
