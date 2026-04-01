@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { getIncomes, deleteIncome, archiveIncome, unarchiveIncome, canEdit, getApiErrorMessage } from '../api/api';
 import IncomeDetails from './IncomeDetails';
-import { Button, Input } from '@material-tailwind/react';
+import { Button, Input, Select, Option } from '@material-tailwind/react';
 import AddIncomeModal from './AddIncomeModal';
 import Pagination from './Pagination';
 import {
@@ -25,6 +25,7 @@ const IncomeDocument = ({ currentUser }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+    const [orderBy, setOrderBy] = useState('created_at');
     const [currentPage, setCurrentPage] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
@@ -42,6 +43,7 @@ const IncomeDocument = ({ currentUser }) => {
                 if (searchTerm) params.search = searchTerm;
                 if (startDate) params.date_from = startDate;
                 if (endDate) params.date_to = endDate;
+                params.ordering = orderBy === 'contract_date' ? '-contract_date' : '-created_at';
 
                 const response = await getIncomes(params, controller.signal);
                 if (controller.signal.aborted) return;
@@ -61,7 +63,7 @@ const IncomeDocument = ({ currentUser }) => {
 
         fetchIncomes();
         return () => controller.abort();
-    }, [currentPage, searchTerm, startDate, endDate]);
+    }, [currentPage, searchTerm, startDate, endDate, orderBy]);
 
     const handleViewDetails = (income) => {
         setSelectedIncome(income);
@@ -142,13 +144,18 @@ const IncomeDocument = ({ currentUser }) => {
         setCurrentPage(1);
     };
 
+    const handleOrderByChange = (value) => {
+        setOrderBy(value);
+        setCurrentPage(1);
+    };
+
     return (
         <div className="p-3 sm:p-4 w-full min-w-0 overflow-auto">
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg sm:text-xl font-bold">Список приходов</h2>
                 <span className="text-sm text-gray-600">Всего: {totalCount}</span>
             </div>
-            <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+            <div className="mb-4 grid grid-cols-1 sm:grid-cols-4 gap-3 sm:gap-4">
                 <div className="min-w-0 w-full">
                     <Input
                         type="text"
@@ -179,6 +186,16 @@ const IncomeDocument = ({ currentUser }) => {
                         className="!min-w-0"
                         containerProps={{ className: 'min-w-0' }}
                     />
+                </div>
+                <div className="min-w-0 w-full">
+                    <Select
+                        label="Сортировка"
+                        value={orderBy}
+                        onChange={(val) => handleOrderByChange(val)}
+                    >
+                        <Option value="created_at">Создан</Option>
+                        <Option value="contract_date">Дата контракта</Option>
+                    </Select>
                 </div>
             </div>
 

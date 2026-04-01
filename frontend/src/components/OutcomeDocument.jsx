@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getOutcomes, deleteOutcome, archiveOutcome, unarchiveOutcome, canEdit, getApiErrorMessage } from '../api/api';
 import OutcomeDetails from './OutcomeDetails';
-import { Button, Input, Dialog, DialogHeader, DialogBody, DialogFooter } from '@material-tailwind/react';
+import { Button, Input, Select, Option, Dialog, DialogHeader, DialogBody, DialogFooter } from '@material-tailwind/react';
 import Pagination from './Pagination';
 import EditOutcomeModal from './EditOutcomeModal';
 import {
@@ -26,6 +26,7 @@ const OutcomeDocument = ({ currentUser }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+    const [orderBy, setOrderBy] = useState('created_at');
     const [currentPage, setCurrentPage] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
@@ -43,6 +44,7 @@ const OutcomeDocument = ({ currentUser }) => {
                 if (searchTerm) params.search = searchTerm;
                 if (startDate) params.date_from = startDate;
                 if (endDate) params.date_to = endDate;
+                params.ordering = orderBy === 'contract_date' ? '-contract_date' : '-created_at';
 
                 const response = await getOutcomes(params, controller.signal);
                 if (controller.signal.aborted) return;
@@ -61,7 +63,7 @@ const OutcomeDocument = ({ currentUser }) => {
 
         fetchOutcomes();
         return () => controller.abort();
-    }, [currentPage, searchTerm, startDate, endDate]);
+    }, [currentPage, searchTerm, startDate, endDate, orderBy]);
 
     const handleViewDetails = (outcome) => {
         setSelectedOutcome(outcome);
@@ -145,13 +147,18 @@ const OutcomeDocument = ({ currentUser }) => {
         setCurrentPage(1);
     };
 
+    const handleOrderByChange = (value) => {
+        setOrderBy(value);
+        setCurrentPage(1);
+    };
+
     return (
         <div className="p-3 sm:p-4 w-full min-w-0 overflow-auto">
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg sm:text-xl font-bold">Список расходов</h2>
                 <span className="text-sm text-gray-600">Всего: {totalCount}</span>
             </div>
-            <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+            <div className="mb-4 grid grid-cols-1 sm:grid-cols-4 gap-3 sm:gap-4">
                 <div className="min-w-0 w-full">
                     <Input
                         type="text"
@@ -182,6 +189,16 @@ const OutcomeDocument = ({ currentUser }) => {
                         className="!min-w-0"
                         containerProps={{ className: 'min-w-0' }}
                     />
+                </div>
+                <div className="min-w-0 w-full">
+                    <Select
+                        label="Сортировка"
+                        value={orderBy}
+                        onChange={(val) => handleOrderByChange(val)}
+                    >
+                        <Option value="created_at">Создан</Option>
+                        <Option value="contract_date">Дата контракта</Option>
+                    </Select>
                 </div>
             </div>
 

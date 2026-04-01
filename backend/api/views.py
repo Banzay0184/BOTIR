@@ -181,7 +181,7 @@ class ProductMarkingViewSet(viewsets.ModelViewSet):
 
 class IncomeViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsOperatorOrAdminOrReadOnly]
-    queryset = Income.objects.prefetch_related("income").select_related('from_company', 'added_by').order_by('created_at')
+    queryset = Income.objects.prefetch_related("income").select_related('from_company', 'added_by').order_by('-created_at', '-id')
     serializer_class = IncomeSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = IncomeFilter
@@ -192,7 +192,7 @@ class IncomeViewSet(viewsets.ModelViewSet):
         if self.request.query_params.get('is_archive') == 'true':
             # Последний добавленный в архив — первым в списке
             return qs.order_by('-archived_at', '-id')
-        return qs.order_by('created_at')
+        return qs.order_by('-created_at', '-id')
 
     # Правило архива (must при странице /archive): архивный приход — только чтение. PUT/PATCH → 400.
     def update(self, request, *args, **kwargs):
@@ -262,7 +262,7 @@ class IncomeViewSet(viewsets.ModelViewSet):
 
 
 class OutcomeViewSet(viewsets.ModelViewSet):
-    queryset = Outcome.objects.select_related('to_company', 'added_by').prefetch_related('product_markings').order_by('created_at')
+    queryset = Outcome.objects.select_related('to_company', 'added_by').prefetch_related('product_markings').order_by('-created_at', '-id')
     serializer_class = OutcomeSerializer
     permission_classes = [IsAuthenticated, IsOperatorOrAdminOrReadOnly]
     filter_backends = [DjangoFilterBackend]
@@ -274,7 +274,7 @@ class OutcomeViewSet(viewsets.ModelViewSet):
         if self.request.query_params.get('is_archive') == 'true':
             # Последний добавленный в архив — первым в списке
             return qs.order_by('-archived_at', '-id')
-        return qs.order_by('created_at')
+        return qs.order_by('-created_at', '-id')
 
     # Правило архива (must при отдельной странице /archive): архивный расход — только чтение.
     # PUT/PATCH/DELETE по архиву: редактирование запрещено (400); удаление — только после архива, затем разрешено.
